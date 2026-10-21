@@ -27,14 +27,27 @@ flowchart TD
         Port_Router["Virtual Port Remapper & Conflict Allocator"]
         Sig_Supervisor["Process Supervisor\n(kill -pgid SIGSTOP / SIGCONT)"]
         KeepAlive_Pinger["15s QUIC Keep-Alive Heartbeat"]
+        DB_PrePing["Database Pre-Ping Injector\n(Stale Socket Recovery)"]
     end
 
-    subgraph Storage_Layer["Content-Addressable Storage (CAS)"]
+    subgraph Build_Layer["Build Engine & Thermal Governor"]
+        CPU_Gov["CpuPinningGovernor\n(taskset -c 0-3 nice -n 19)"]
+        RAM_Shm["RamTmpfsManager\n(/dev/shm Build Scratchpad)"]
+        Build_Eng["BuildEngine Pipeline"]
+    end
+
+    subgraph Storage_Layer["Content-Addressable Storage (CAS) & Storage Doctor"]
         CAS_Store["Global Immutable Store\n(/files/store/<hash>-<name>/)"]
         CAS_Db["Room Metadata Catalog & RefCount DB"]
         Zstd_Engine["Zstd-JNI Stream Extractor\n(> 1.2 GB/s Decompression)"]
-        Apk_Engine["apk.static Transitive Resolver"]
         Elf_Patcher["16KB Alignment & RPATH Patcher"]
+        Doc_Storage["Storage Doctor\n(Hidden 5 Cache Reclaimer)"]
+    end
+
+    subgraph Hub_Layer["Curated Package Hub"]
+        Hub_Reg["HubPackageRegistry\n(14 Polyglot Runtimes)"]
+        Hub_Ingest["HubIngestionEngine"]
+        Smoke_Runner["PolyglotSmokeRunner\n(RSS < 45MB Healthcheck)"]
     end
 
     subgraph Sandboxes["Service Execution Sandboxes"]
@@ -46,9 +59,13 @@ flowchart TD
     UI_Layer -->|Local IPC / Kotlin StateFlow| Host_Daemon
     Host_Daemon --> Proxy_Layer
     Host_Daemon --> Storage_Layer
+    Host_Daemon --> Build_Layer
+    Host_Daemon --> Hub_Layer
+    Build_Layer --> Sandboxes
     Proxy_Layer --> Sandboxes
     Storage_Layer -->|Read-Only Symlink Farm| Sandboxes
-    Tmp_Shm -.->|RAM-backed ephemeral mounts| Sandboxes
+    RAM_Shm -.->|RAM-backed ephemeral mounts| Sandboxes
+    Hub_Layer --> CAS_Store
 ```
 
 ---
@@ -142,171 +159,248 @@ sequenceDiagram
 
 ---
 
-## 4. Content-Addressable Storage (CAS) & Virtual Symlink Entity Model
+## 4. Build Engine & LITTLE Core CPU Pinning Architecture
 
-To achieve hermetic isolation without requiring container virtualization (such as Docker, namespaces, or `chroot` which require root on Android), PocketServer enforces an **"Install Once, Link Everywhere"** storage design. All packages, runtime toolchains, and shared libraries reside in an immutable global content-addressable store indexed by SHA-256 hash. Per-service sandboxes are constructed dynamically using relative POSIX symlink farms.
+Mobile SoCs (Snapdragon, Tensor, Dimensity) employ heterogeneous big.LITTLE architectures (e.g. 4 efficiency LITTLE cores + 3 performance cores + 1 prime core). Running intensive compiler toolchains (`cargo build`, `bun build`, `uv pip install`) on performance cores spikes temperatures above 42°C, causing kernel thermal throttling and rapid battery drain.
 
-```mermaid
-erDiagram
-    TOOLCHAIN_PACKAGE ||--o{ CAS_FILE_NODE : contains
-    TOOLCHAIN_PACKAGE ||--o{ SANDBOX_SYMLINK : maps_into
-    SERVICE_SANDBOX ||--o{ SANDBOX_SYMLINK : contains
-    SERVICE_SANDBOX ||--o{ PROJECT_FILE : executes
-
-    TOOLCHAIN_PACKAGE {
-        string package_id PK "SHA-256 Hash"
-        string name "e.g. python-3.12, bun-1.2"
-        string version "Semantic version"
-        int size_bytes "Total disk footprint"
-        int ref_count "Active sandboxes linking this tool"
-        string rpath "Embedded ELF runtime search path"
-        boolean is_16kb_aligned "Verified 16KB page boundary"
-    }
-
-    CAS_FILE_NODE {
-        string file_sha256 PK "Content SHA-256"
-        string relative_path "e.g. bin/python, lib/libssl.so"
-        int file_mode "POSIX permissions (e.g. 0755)"
-        int byte_size "Uncompressed size"
-    }
-
-    SERVICE_SANDBOX {
-        string service_id PK "UUID"
-        string name "User-assigned project name"
-        string rootfs_dir "Path inside context.filesDir"
-        int assigned_port "Listening TCP port"
-        string active_state "STOPPED, ACTIVE, SLEEPING"
-    }
-
-    SANDBOX_SYMLINK {
-        string link_path PK "e.g. /sandbox/rootfs/usr/bin/python"
-        string target_cas_path "Relative link: ../../../store/<hash>/bin/python"
-        string link_type "DIRECTORY or REGULAR_FILE"
-    }
-
-    PROJECT_FILE {
-        string file_path PK "Relative path in repository"
-        int file_size "Bytes on disk"
-        datetime modified_at "Timestamp"
-    }
-```
+PocketServer routes all builds through `CpuPinningGovernor` and `RamTmpfsManager`:
 
 ```mermaid
-classDiagram
-    class ContentAddressableStore {
-        -File storeRootDir
-        -ToolchainDatabase database
-        +ingestPackage(File tarZstFile, String expectedHash) ToolchainPackage
-        +verifyPackageIntegrity(String packageId) Boolean
-        +incrementRefCount(String packageId) Unit
-        +decrementRefCount(String packageId) Unit
-        +runGarbageCollector() Int
-    }
-
-    class SymlinkFarmManager {
-        -File sandboxesRootDir
-        +createSandboxRootfs(String serviceId, List~String~ packageIds) File
-        +linkToolchainIntoSandbox(File rootfsDir, ToolchainPackage pkg) Unit
-        +teardownSandbox(String serviceId) Boolean
-    }
-
-    class ZstdExtractor {
-        +extractTarZstStream(InputStream input, File targetDir) ExtractionResult
-        +streamDirect(File archiveFile, File destinationDir) Long
-    }
-
-    class ElfAlignmentEngine {
-        +verify16KbAlignment(File elfFile) AlignmentResult
-        +inspectProgramHeaders(File elfFile) List~ProgramHeader~
-        +verifyRpath(File elfFile, String expectedPrefix) Boolean
-    }
-
-    class ApkStaticManager {
-        -File apkStaticBinary
-        -File storeDir
-        +resolveAndInstall(String packageName, File targetStoreDir) Boolean
-        +queryDependencies(String packageName) List~String~
-    }
-
-    ContentAddressableStore --> ZstdExtractor : uses
-    ContentAddressableStore --> ElfAlignmentEngine : verifies
-    ContentAddressableStore --> ApkStaticManager : orchestrates
-    SymlinkFarmManager ..> ContentAddressableStore : resolves links from
-```
-
-```mermaid
-classDiagram
-    class SocketActivationProxy {
-        -String bindHost
-        -Int listenPort
-        -String targetHost
-        -Int targetPort
-        -ProcessSupervisor supervisor
-        +start(CoroutineScope scope) Unit
-        +stop() Unit
-        +getActualListenPort() Int
-    }
-
-    class ProcessSupervisor {
-        -String serviceId
-        -Long inactivityTimeoutMs
-        -StateFlow~ServiceProcessState~ state
-        +start(List~String~ command, File workingDir, Map env, CoroutineScope scope) Process
-        +freeze() Boolean
-        +wake() Long
-        +terminate(Long graceTimeoutMs) Unit
-        +injectEnvironment(Map baseEnv) Map
-        +recordActivity() Unit
-    }
-
-    class VirtualPortAllocator {
-        -Int minPort
-        -Int maxPort
-        +allocate(String serviceId, Int requestedPort, String host) PortAllocation
-        +release(String serviceId) PortAllocation
-        +isPortAvailable(Int port, String host) Boolean
-        +getAllocation(String serviceId) PortAllocation
-    }
-
-    class NetworkRoamingMonitor {
-        -StateFlow~NetworkState~ networkState
-        +startMonitoring(Context context) Unit
-        +stopMonitoring() Unit
-        +addListener(IpMigrationListener listener) Unit
-        +resolveCurrentLocalIp() String
-    }
-
-    class MdnsDiscoveryManager {
-        +registerService(String serviceName, Int port, String serviceType, Map attributes, Function onSuccess) Unit
-        +unregisterService(String serviceName) Unit
-        +reRegisterAll(String newIp) Unit
-        +unregisterAll() Unit
-    }
-
-    class CloudflareQuickTunnel {
-        -StateFlow~TunnelState~ tunnelState
-        +start(Int localPort, CoroutineScope scope, String binaryPath) Unit
-        +attachProcess(Process process, CoroutineScope scope) Unit
-        +stop() Unit
-        +parseTunnelUrl(String text) String
-    }
-
-    class DualQrCodeEngine {
-        +createShareEndpoint(String serviceName, String localIp, Int port, String globalTunnelUrl) ShareEndpoint
-        +generateQrMatrix(String content, Int size, Int margin) QrMatrix
-        +renderBitmap(QrMatrix matrix, Int fgColor, Int bgColor) Bitmap
-        +renderQrBitmap(String content, Int size, Int fgColor, Int bgColor) Bitmap
-    }
-
-    SocketActivationProxy --> ProcessSupervisor : activates
-    SocketActivationProxy --> VirtualPortAllocator : resolves ports
-    NetworkRoamingMonitor ..> MdnsDiscoveryManager : triggers on IP change
-    NetworkRoamingMonitor ..> DualQrCodeEngine : updates LAN endpoints
+flowchart TD
+    BuildReq["Build Request Triggered\n(cargo build / uv pip / bun build)"]
+    
+    subgraph CorePinning["LITTLE Core Pinning Engine"]
+        Topology["Detect CPU Topology\n(Cores 0-3 Efficiency Clustered)"]
+        WrapCLI["Wrap Invocation:\ntaskset -c 0-3 nice -n 19"]
+        NativeAffinity["Native JNI sched_setaffinity()\n& setpriority(PRIO_PROCESS, 19)"]
+    end
+    
+    subgraph ScratchpadManager["RAM-backed tmpfs Scratchpad (/dev/shm)"]
+        ProbeSHM["Probe /dev/shm Availability"]
+        AllocSHM["Allocate /dev/shm/pocketserver_builds/<id>/"]
+        InjectEnv["Route Toolchain Caches:\nTMPDIR, CARGO_TARGET_DIR, UV_CACHE_DIR, npm_config_cache"]
+    end
+    
+    subgraph Execution["Build Execution Under Governor"]
+        SpawnProc["Spawn Child Compiler Process"]
+        StreamLogs["Stream Build Logs"]
+        EvalThermal["Thermal Budget Check:\nTemp < 34°C & SoC Power < 0.6W"]
+    end
+    
+    subgraph CleanUp["Instant Evaporation"]
+        WipeSHM["Evaporate RAM Scratchpad\n(Zero NAND Flash Wear)"]
+    end
+    
+    BuildReq --> Topology
+    Topology --> WrapCLI
+    BuildReq --> ProbeSHM
+    ProbeSHM --> AllocSHM --> InjectEnv
+    WrapCLI --> SpawnProc
+    InjectEnv --> SpawnProc
+    SpawnProc --> NativeAffinity
+    NativeAffinity --> StreamLogs
+    StreamLogs --> EvalThermal
+    EvalThermal --> WipeSHM
 ```
 
 ---
 
-## 5. Core Systems Engineering Principles
+## 5. Storage Doctor & 1-Tap Deep Purge Flowchart
+
+PocketServer isolates the "Hidden 5" compiler caches and ensures safe, complete reclamation without compromising user project code or immutable CAS store runtimes.
+
+```mermaid
+flowchart TD
+    StartScan["User Opens Storage Doctor / Calls analyze()"]
+    
+    subgraph Discovery["Parallel Storage Inspection"]
+        ScanCAS["Measure Immutable CAS Store\n(/files/store/<hash>-<name>/)"]
+        ScanCode["Calculate User Source Code\n(sandboxes/ & projects/)"]
+        ScanHidden5["Scan the Hidden 5 Mobile Compiler Caches"]
+    end
+    
+    subgraph Hidden5["The Hidden 5 Reclaimable Caches"]
+        C1["1. Cargo Registry Sources:\n~/.cargo/registry/src/"]
+        C2["2. Python uv Cache:\n~/.cache/uv/"]
+        C3["3. npm & Bun Cache:\n~/.npm/_cacache/, ~/.bun/install/cache/"]
+        C4["4. Incremental Builds:\ntarget/*/incremental/, __pycache__, .pytest_cache"]
+        C5["5. Git Temp Objects:\n.git/objects/tmp_*, index.lock"]
+    end
+    
+    subgraph Breakdown["Breakdown Assembly"]
+        SumBytes["Compute Reclaimable Bytes & Percentages"]
+        RenderUI["Render Plain-English Breakdown\n(76MB Runtimes, 45MB Code, 1.08GB Reclaimable)"]
+    end
+    
+    subgraph PurgeAction["1-Tap Deep Purge Execution"]
+        SafetyGate{"Safety Gate:\nIs Path inside CAS Store\nor User Source File?"}
+        RejectDelete["Skip & Preserve Safe Path"]
+        PerformDelete["Purge Cache Directory / File"]
+        Freespace["Update Available Free Storage Space"]
+    end
+    
+    StartScan --> Discovery
+    Discovery --> ScanCAS & ScanCode & ScanHidden5
+    ScanHidden5 --> C1 & C2 & C3 & C4 & C5
+    ScanCAS & ScanCode & C1 & C2 & C3 & C4 & C5 --> SumBytes
+    SumBytes --> RenderUI
+    RenderUI -->|User taps Free X.XX GB| SafetyGate
+    SafetyGate -- Yes (Protected) --> RejectDelete
+    SafetyGate -- No (Reclaimable) --> PerformDelete
+    PerformDelete --> Freespace
+```
+
+---
+
+## 6. External Database Pre-Ping Connection Recovery
+
+When a hosted service is suspended (`SIGSTOP`), remote databases (Supabase, Neon, AWS RDS) time out the idle TCP connection. Upon unfreezing (`SIGCONT`), attempting to write to the stale socket throws `BrokenPipeError: [Errno 32] Broken pipe`.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as HTTP Client
+    participant Proxy as PocketServer Proxy
+    participant Backend as Python/Node/Go Service
+    participant Pool as Database Connection Pool
+    participant RemoteDB as Remote PostgreSQL / MySQL
+
+    Note over Backend,RemoteDB: Process Suspended Phase (SIGSTOP)
+    Note over RemoteDB: Remote DB TCP idle timeout expires (e.g. 5 minutes)
+    RemoteDB->>RemoteDB: Close idle socket (Send FIN / RST)
+    Note over Backend: Process is suspended; cannot process FIN packet
+
+    Note over Client,Proxy: Request Arrives -> Process Resumed (SIGCONT)
+    Client->>Proxy: HTTP GET /api/users
+    Proxy->>Backend: kill(-pgid, SIGCONT) (Wakes in < 1ms)
+    Backend->>Pool: Acquire connection to execute query
+
+    Note over Pool,RemoteDB: Pre-Ping Validation Phase
+    alt With Pre-Ping Injection (PocketServer)
+        Pool->>Pool: Check connection age > pool_recycle (30s)
+        Pool->>RemoteDB: Send pre-ping probe query (SELECT 1)
+        RemoteDB-->>Pool: Dead socket detected (Broken Pipe / RST)
+        Pool->>Pool: Discard stale socket silently
+        Pool->>RemoteDB: Establish fresh TCP + TLS connection
+        RemoteDB-->>Pool: Connection established
+        Pool->>RemoteDB: Execute user query (SELECT * FROM users)
+        RemoteDB-->>Backend: Query results (200 OK)
+        Backend-->>Proxy: HTTP 200 OK
+        Proxy-->>Client: HTTP 200 OK
+    else Without Pre-Ping (Standard Behavior)
+        Pool->>RemoteDB: Send query on stale socket
+        RemoteDB-->>Pool: RST packet (Broken Pipe Error)
+        Pool-->>Backend: Crash with BrokenPipeError: [Errno 32]
+        Backend-->>Proxy: HTTP 500 Internal Server Error
+    end
+```
+
+---
+
+## 7. Package Hub & Polyglot Runtime Class Model
+
+```mermaid
+classDiagram
+    class PolyglotRuntime {
+        <<enumeration>>
+        PYTHON
+        JAVASCRIPT
+        GO
+        RUST
+        CPP
+        JAVA_KOTLIN
+        PHP
+        RUBY
+        DOTNET
+        ZIG
+        REDIS
+        SQLITE
+        DUCKDB
+        CADDY
+    }
+
+    class HubPackageDescriptor {
+        +PolyglotRuntime runtime
+        +RuntimeCategory category
+        +String packageName
+        +String engineVersion
+        +Long upstreamSizeBytes
+        +Long strippedSizeBytes
+        +String sha256Checksum
+        +String archiveFileName
+        +String primaryBinaryRelPath
+        +String strippingMethod
+        +Int defaultPort
+        +Map environmentVariables
+        +String helloWorldScript
+        +List helloWorldCommand
+        +Double getUpstreamSizeMb()
+        +Double getStrippedSizeMb()
+        +Double getCompressionRatio()
+    }
+
+    class HubPackageRegistry {
+        +getAllPackages() List~HubPackageDescriptor~
+        +getLanguageRuntimes() List~HubPackageDescriptor~
+        +getInfrastructureServices() List~HubPackageDescriptor~
+        +findByRuntime(PolyglotRuntime) HubPackageDescriptor
+        +findByPackageName(String) HubPackageDescriptor
+    }
+
+    class HubIngestionEngine {
+        -ContentAddressableStore casStore
+        -PocketDatabase database
+        -ToolchainIngestionPipeline pipeline
+        +ingestPackage(HubPackageDescriptor, File archive) IngestionResult
+        +isPackageInstalled(HubPackageDescriptor) Boolean
+    }
+
+    class PolyglotSmokeRunner {
+        +runSmokeTest(PolyglotRuntime, List command, File dir, Int port) PolyglotSmokeResult
+        +readProcessRssBytes(Long pid) Long
+    }
+
+    class BuildEngine {
+        -CpuPinningGovernor cpuGovernor
+        -RamTmpfsManager ramTmpfsManager
+        +executeBuild(String projectId, File dir, List command, BuildOptions) BuildResult
+    }
+
+    class CpuPinningGovernor {
+        +resolveLittleCoreRange() Pair~Int, Int~
+        +getLittleCoreMaskString() String
+        +wrapCommand(List command, Int nice) List~String~
+        +applyPinning(Int pid, Int maxLittleCore, Int nice) Boolean
+        +evaluateThermalBudget(Boolean isPinned, Long durationMs) ThermalMetrics
+    }
+
+    class RamTmpfsManager {
+        -File preferredShmDir
+        +isShmAvailable() Boolean
+        +allocateScratchpad(String id, File fallback) File
+        +prepareBuildCacheEnv(File scratchpad) Map~String, String~
+        +evaporateScratchpad(File scratchpad) Boolean
+    }
+
+    class StorageDoctor {
+        -ContentAddressableStore casStore
+        -PocketDatabase database
+        +analyze(File baseDir, File homeDir, List projectDirs) StorageBreakdown
+        +cleanReclaimableCaches(StorageBreakdown, File baseDir, File homeDir, List projectDirs) StorageReclaimResult
+    }
+
+    HubPackageRegistry --> HubPackageDescriptor : provides
+    HubPackageDescriptor --> PolyglotRuntime : specifies
+    HubIngestionEngine --> HubPackageDescriptor : installs
+    PolyglotSmokeRunner --> PolyglotRuntime : validates
+    BuildEngine --> CpuPinningGovernor : pins CPU
+    BuildEngine --> RamTmpfsManager : caches in RAM
+    StorageDoctor ..> HubPackageRegistry : protects installed CAS runtimes
+```
+
+---
+
+## 8. Core Systems Engineering Principles
 
 ### 1. 16 KB Page Alignment Deep-Dive
 Starting with Android 15, devices can run with a 16 KB kernel page size instead of 4 KB. Any shared library or ELF binary loaded via `dlopen()` or `execve()` whose program headers (`LOAD` segments) have an alignment (`p_align`) less than `0x4000` (16,384 bytes) or whose virtual address (`p_vaddr`) does not match the file offset (`p_offset`) modulo 16 KB will cause immediate kernel faults (`SIGBUS: bus error`).
@@ -327,7 +421,7 @@ Android's multi-user sandbox models each application under a distinct Linux UID 
 - **Atomic Directory Updates:** When packages are installed, they are extracted into a hidden staging directory (`.staging-<uuid>`) on the same physical filesystem and renamed via `renameat()` to ensure atomic updates that are crash-proof across battery drops or power cuts.
 
 ### 3. OEM Background Survival (`VpnService` Shield)
-Standard Android background mechanisms (such as `WorkManager`, `JobScheduler`, or basic `ForegroundService` with notification) are aggressively killed by aggressive vendor operating systems (Samsung One UI, Xiaomi HyperOS, OnePlus OxygenOS) within 3 to 10 minutes of screen lock.
+Standard Android background mechanisms (such as `WorkManager`, `JobScheduler`, or basic `ForegroundService` with notification) are aggressively killed by vendor operating systems (Samsung One UI, Xiaomi HyperOS, OnePlus OxygenOS) within 3 to 10 minutes of screen lock.
 
 PocketServer overcomes this via `PocketServerVpnService`:
 1. It registers an internal dummy VPN tunnel using Android's `VpnService.Builder`.
