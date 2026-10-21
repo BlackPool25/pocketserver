@@ -93,6 +93,30 @@ class NativeEngineTest {
         }
     }
 
+    @Test
+    fun `setCpuAffinity and setProcessNice succeed on valid process`() {
+        val process = ProcessBuilder("sleep", "10").start()
+        val pid = extractPid(process).toInt()
+
+        try {
+            // Mask for CPU 0 (0x1)
+            val affinityResult = NativeEngine.setCpuAffinity(pid, 0x1L)
+            // On Linux hosts with taskset or native affinity, this returns 0
+            assertThat(affinityResult).isEqualTo(0)
+
+            // Nice priority to 19 (idle priority)
+            val niceResult = NativeEngine.setProcessNice(pid, 19)
+            assertThat(niceResult).isEqualTo(0)
+
+            // Pin to little cores (0..3) with nice 19
+            val pinned = NativeEngine.pinToLittleCores(pid, maxLittleCore = 3, niceValue = 19)
+            assertThat(pinned).isTrue()
+        } finally {
+            NativeEngine.sendSignalToProcess(pid, NativeEngine.SIGKILL)
+            process.destroyForcibly()
+        }
+    }
+
     private fun extractPid(process: Process): Long {
         return try {
             val method = Process::class.java.getMethod("pid")

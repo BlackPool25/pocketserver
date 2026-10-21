@@ -171,6 +171,61 @@ object NativeEngine {
         }
     }
 
+    /**
+     * Binds a process to specific CPU cores using a bitmask (1 = CPU0, 2 = CPU1, 4 = CPU2, etc.).
+     * Returns 0 on success, or negative errno on failure.
+     */
+    fun setCpuAffinity(pid: Int, cpuMask: Long): Int {
+        if (pid <= 0) return -1
+        if (isNativeLoaded) {
+            return nativeSetCpuAffinity(pid, cpuMask)
+        }
+        // JVM/Linux CLI fallback using taskset
+        return try {
+            val hexMask = "0x" + java.lang.Long.toHexString(cpuMask)
+            val process = ProcessBuilder("taskset", "-p", hexMask, pid.toString()).start()
+            val exitCode = process.waitFor()
+            if (exitCode == 0) 0 else -1
+        } catch (e: Exception) {
+            -1
+        }
+    }
+
+    /**
+     * Sets the scheduling priority (nice value) of a process (-20 to 19, where 19 is lowest priority).
+     * Returns 0 on success, or negative errno on failure.
+     */
+    fun setProcessNice(pid: Int, niceValue: Int): Int {
+        if (pid <= 0) return -1
+        val clampedNice = niceValue.coerceIn(-20, 19)
+        if (isNativeLoaded) {
+            return nativeSetProcessNice(pid, clampedNice)
+        }
+        // JVM/Linux CLI fallback using renice
+        return try {
+            val process = ProcessBuilder("renice", "-n", clampedNice.toString(), "-p", pid.toString()).start()
+            val exitCode = process.waitFor()
+            if (exitCode == 0) 0 else -1
+        } catch (e: Exception) {
+            -1
+        }
+    }
+
+    /**
+     * Pins a process to LITTLE efficiency cores (typically cores 0..maxLittleCore, default 0..3)
+     * and deprioritizes CPU scheduling (nice 19) to prevent battery drain and thermal throttling.
+     */
+    fun pinToLittleCores(pid: Int, maxLittleCore: Int = 3, niceValue: Int = 19): Boolean {
+        if (pid <= 0) return false
+        val availableCores = Runtime.getRuntime().availableProcessors()
+        val effectiveMax = maxLittleCore.coerceAtMost(availableCores - 1).coerceAtLeast(0)
+        val mask = (1L shl (effectiveMax + 1)) - 1L
+
+        val affinityResult = setCpuAffinity(pid, mask)
+        val niceResult = setProcessNice(pid, niceValue)
+        return affinityResult == 0 && niceResult == 0
+    }
+
     // --- Pure JVM ELF64 Parser for Test Verification & Host Execution ---
 
     private fun verify16KbAlignmentJvm(file: File): Boolean {
@@ -247,4 +302,6 @@ object NativeEngine {
     private external fun nativeSendSignalToProcessGroup(pgid: Int, sig: Int): Int
     private external fun nativeSendSignalToProcess(pid: Int, sig: Int): Int
     private external fun nativeGetProcessState(pid: Int): String?
+    private external fun nativeSetCpuAffinity(pid: Int, cpuMask: Long): Int
+    private external fun nativeSetProcessNice(pid: Int, niceValue: Int): Int
 }

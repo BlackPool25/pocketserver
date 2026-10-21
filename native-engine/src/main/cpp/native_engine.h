@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/resource.h>
+#include <sched.h>
 #include <signal.h>
 #include <cerrno>
 #include <cstring>
@@ -81,6 +83,22 @@ Java_com_pocketserver_nativeengine_NativeEngine_nativeGetProcessState(
     JNIEnv* env,
     jobject thiz,
     jint pid
+);
+
+JNIEXPORT jint JNICALL
+Java_com_pocketserver_nativeengine_NativeEngine_nativeSetCpuAffinity(
+    JNIEnv* env,
+    jobject thiz,
+    jint pid,
+    jlong cpu_mask
+);
+
+JNIEXPORT jint JNICALL
+Java_com_pocketserver_nativeengine_NativeEngine_nativeSetProcessNice(
+    JNIEnv* env,
+    jobject thiz,
+    jint pid,
+    jint nice_value
 );
 
 #ifdef __cplusplus

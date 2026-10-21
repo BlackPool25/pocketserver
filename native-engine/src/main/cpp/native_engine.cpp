@@ -262,4 +262,53 @@ Java_com_pocketserver_nativeengine_NativeEngine_nativeGetProcessState(
     return nullptr;
 }
 
+JNIEXPORT jint JNICALL
+Java_com_pocketserver_nativeengine_NativeEngine_nativeSetCpuAffinity(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jint pid,
+    jlong cpu_mask
+) {
+    if (pid < 0) {
+        return -EINVAL;
+    }
+
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    for (int i = 0; i < 64; ++i) {
+        if ((cpu_mask >> i) & 1LL) {
+            CPU_SET(i, &cpuset);
+        }
+    }
+
+    if (sched_setaffinity(static_cast<pid_t>(pid), sizeof(cpu_set_t), &cpuset) != 0) {
+        int err = errno;
+        LOGE("Failed to set CPU affinity for pid %d with mask 0x%llx: errno=%d (%s)",
+             pid, static_cast<unsigned long long>(cpu_mask), err, strerror(err));
+        return -err;
+    }
+    return 0;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_pocketserver_nativeengine_NativeEngine_nativeSetProcessNice(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jint pid,
+    jint nice_value
+) {
+    if (pid < 0) {
+        return -EINVAL;
+    }
+
+    errno = 0;
+    if (setpriority(PRIO_PROCESS, static_cast<id_t>(pid), nice_value) != 0) {
+        int err = errno;
+        LOGE("Failed to set nice value %d for pid %d: errno=%d (%s)",
+             nice_value, pid, err, strerror(err));
+        return -err;
+    }
+    return 0;
+}
+
 } // extern "C"
