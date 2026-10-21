@@ -234,6 +234,76 @@ classDiagram
     SymlinkFarmManager ..> ContentAddressableStore : resolves links from
 ```
 
+```mermaid
+classDiagram
+    class SocketActivationProxy {
+        -String bindHost
+        -Int listenPort
+        -String targetHost
+        -Int targetPort
+        -ProcessSupervisor supervisor
+        +start(CoroutineScope scope) Unit
+        +stop() Unit
+        +getActualListenPort() Int
+    }
+
+    class ProcessSupervisor {
+        -String serviceId
+        -Long inactivityTimeoutMs
+        -StateFlow~ServiceProcessState~ state
+        +start(List~String~ command, File workingDir, Map env, CoroutineScope scope) Process
+        +freeze() Boolean
+        +wake() Long
+        +terminate(Long graceTimeoutMs) Unit
+        +injectEnvironment(Map baseEnv) Map
+        +recordActivity() Unit
+    }
+
+    class VirtualPortAllocator {
+        -Int minPort
+        -Int maxPort
+        +allocate(String serviceId, Int requestedPort, String host) PortAllocation
+        +release(String serviceId) PortAllocation
+        +isPortAvailable(Int port, String host) Boolean
+        +getAllocation(String serviceId) PortAllocation
+    }
+
+    class NetworkRoamingMonitor {
+        -StateFlow~NetworkState~ networkState
+        +startMonitoring(Context context) Unit
+        +stopMonitoring() Unit
+        +addListener(IpMigrationListener listener) Unit
+        +resolveCurrentLocalIp() String
+    }
+
+    class MdnsDiscoveryManager {
+        +registerService(String serviceName, Int port, String serviceType, Map attributes, Function onSuccess) Unit
+        +unregisterService(String serviceName) Unit
+        +reRegisterAll(String newIp) Unit
+        +unregisterAll() Unit
+    }
+
+    class CloudflareQuickTunnel {
+        -StateFlow~TunnelState~ tunnelState
+        +start(Int localPort, CoroutineScope scope, String binaryPath) Unit
+        +attachProcess(Process process, CoroutineScope scope) Unit
+        +stop() Unit
+        +parseTunnelUrl(String text) String
+    }
+
+    class DualQrCodeEngine {
+        +createShareEndpoint(String serviceName, String localIp, Int port, String globalTunnelUrl) ShareEndpoint
+        +generateQrMatrix(String content, Int size, Int margin) QrMatrix
+        +renderBitmap(QrMatrix matrix, Int fgColor, Int bgColor) Bitmap
+        +renderQrBitmap(String content, Int size, Int fgColor, Int bgColor) Bitmap
+    }
+
+    SocketActivationProxy --> ProcessSupervisor : activates
+    SocketActivationProxy --> VirtualPortAllocator : resolves ports
+    NetworkRoamingMonitor ..> MdnsDiscoveryManager : triggers on IP change
+    NetworkRoamingMonitor ..> DualQrCodeEngine : updates LAN endpoints
+```
+
 ---
 
 ## 5. Core Systems Engineering Principles

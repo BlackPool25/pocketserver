@@ -64,10 +64,12 @@ PocketServer is architected as a modular Android systems workspace:
 
 ```
 pocketserver/
+├── core-network/         # Network roaming monitor, mDNS discovery, Cloudflare quick tunnel, dual QR engine
 ├── core-persistence/     # VpnService loopback shield, dual Wi-Fi locks, PowerGovernor, BootReceiver
+├── core-proxy/           # Epoll reverse proxy, SIGSTOP/SIGCONT process supervisor, dynamic port remapper
 ├── core-storage/         # Content-Addressable Storage (/files/store/), Room manifest DB, symlink farms
 ├── core-toolchain/       # Zstd-JNI streaming extractor, 4-stage ingestion, apk.static, 16KB ELF validator
-├── native-engine/        # C++ NDK library compiled with 16KB page alignment flags for direct POSIX operations
+├── native-engine/        # C++ NDK library (16KB aligned) for POSIX symlinks, fsync, and process group signals
 ├── build.gradle.kts      # Root build script
 ├── settings.gradle.kts   # Module catalog & repository resolution
 ├── ARCHITECTURE.md       # Deep technical specification with Mermaid UML diagrams
