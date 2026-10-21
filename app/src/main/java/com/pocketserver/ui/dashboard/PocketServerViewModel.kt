@@ -20,6 +20,7 @@ import com.pocketserver.storage.db.PocketDatabase
 import com.pocketserver.storage.db.SandboxEntity
 import com.pocketserver.storage.doctor.StorageBreakdown
 import com.pocketserver.storage.doctor.StorageDoctor
+import com.pocketserver.toolchain.pipeline.ToolchainIngestionPipeline
 import com.pocketserver.ui.commands.FriendlyCommandRunner
 import com.pocketserver.ui.editor.PocketEditorSession
 import com.pocketserver.ui.logs.HumanLogViewer
@@ -32,6 +33,7 @@ import com.pocketserver.ui.system.PocketNotificationController
 import com.pocketserver.ui.system.PocketServerTileService
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.serialization.Serializable
@@ -57,10 +59,12 @@ class PocketServerViewModel(
     val wakeCoordinator: MonorepoWakeCoordinator = MonorepoWakeCoordinator(),
     val storageDoctor: StorageDoctor = StorageDoctor(null, database),
     val searchDb: UnifiedPackageSearchDb = UnifiedPackageSearchDb(context),
+    val casStore: ContentAddressableStore = ContentAddressableStore(File(context.filesDir, "store"), database),
+    val shimGenerator: BinaryShimGenerator = BinaryShimGenerator(File(context.filesDir, "bin")),
     val pocketForgeManager: PocketForgeManager = PocketForgeManager(
         searchDb = searchDb,
-        casStore = ContentAddressableStore(File(context.filesDir, "store"), database),
-        shimGenerator = BinaryShimGenerator(File(context.filesDir, "bin"))
+        casStore = casStore,
+        shimGenerator = shimGenerator
     ),
     val orchestrator: ServiceOrchestrator = ServiceOrchestrator(context, database),
     val universeSync: PackageUniverseSync = PackageUniverseSync(searchDb, pocketForgeManager),
@@ -495,27 +499,124 @@ class PocketServerViewModel(
     }
 
     /**
-     * Downloads and installs a package from the universe into the CAS store.
+     * Downloads, extracts, ingests into CAS store, generates POSIX execution shim,
+     * and marks the package installed in the search DB.
      */
-    fun installPackage(packageRecord: UnifiedPackageRecord) {
-        viewModelScope.launch(ioDispatcher) {
+    fun installPackage(packageRecord: UnifiedPackageRecord): Job {
+        return viewModelScope.launch(ioDispatcher) {
             val pkgId = packageRecord.id
-            val tempArchive = File(context.cacheDir, "pkg_downloads/${packageRecord.name}-${packageRecord.version}.tar.zst")
+            val urlFileName = packageRecord.downloadUrl.substringAfterLast("/").substringBefore("?")
+            val ext = when {
+                urlFileName.endsWith(".zip") -> ".zip"
+                urlFileName.endsWith(".tar.gz") -> ".tar.gz"
+                urlFileName.endsWith(".tgz") -> ".tgz"
+                else -> ".tar.zst"
+            }
+            val tempArchive = File(context.cacheDir, "pkg_downloads/${packageRecord.name}-${packageRecord.version}$ext")
             tempArchive.parentFile?.mkdirs()
 
-            downloader.downloadArchive(
+            val downloadResult = downloader.downloadArchive(
                 downloadUrl = packageRecord.downloadUrl,
                 destinationFile = tempArchive,
-                expectedSha256 = if (packageRecord.sha256Checksum.isNotBlank() && packageRecord.sha256Checksum != "d41d8cd98f00b204e9800998ecf8427e") packageRecord.sha256Checksum else null,
+                expectedSha256 = if (packageRecord.sha256Checksum.isNotBlank() && !packageRecord.sha256Checksum.startsWith("d41d8cd98f00b204e9800998ecf8427e")) packageRecord.sha256Checksum else null,
                 onProgress = { progress ->
                     val current = _installProgress.value.toMutableMap()
                     current[pkgId] = progress
                     _installProgress.value = current
-                    if (progress.stage == InstallStage.COMPLETED) {
-                        recordActivity("Package installed", "Installed ${packageRecord.name} (${packageRecord.version})", "INSTALLED")
-                    }
                 }
             )
+
+            if (downloadResult.isFailure) {
+                val err = downloadResult.exceptionOrNull()?.message ?: "Download failed"
+                val current = _installProgress.value.toMutableMap()
+                current[pkgId] = InstallProgress(stage = InstallStage.FAILED, detailMessage = err)
+                _installProgress.value = current
+                return@launch
+            }
+
+            // Stage 3: EXTRACTING & CAS Ingestion
+            val currentExtract = _installProgress.value.toMutableMap()
+            currentExtract[pkgId] = InstallProgress(
+                stage = InstallStage.EXTRACTING,
+                progressPercent = 70,
+                detailMessage = "Extracting hermetic package into CAS..."
+            )
+            _installProgress.value = currentExtract
+
+            val pipeline = ToolchainIngestionPipeline(casStore)
+            val pipelineResult = pipeline.ingestArchive(
+                archiveFile = tempArchive,
+                packageName = packageRecord.name,
+                version = packageRecord.version,
+                expectedSha256 = if (packageRecord.sha256Checksum.isNotBlank() && !packageRecord.sha256Checksum.startsWith("d41d8cd98f00b204e9800998ecf8427e")) packageRecord.sha256Checksum else null
+            )
+
+            val storeDir = pipelineResult.storeDirectory ?: run {
+                val err = pipelineResult.errorMessage ?: "CAS ingestion pipeline failed"
+                val current = _installProgress.value.toMutableMap()
+                current[pkgId] = InstallProgress(stage = InstallStage.FAILED, detailMessage = err)
+                _installProgress.value = current
+                tempArchive.delete()
+                return@launch
+            }
+
+            if (!pipelineResult.isSuccess) {
+                val err = pipelineResult.errorMessage ?: "CAS ingestion pipeline failed"
+                val current = _installProgress.value.toMutableMap()
+                current[pkgId] = InstallProgress(stage = InstallStage.FAILED, detailMessage = err)
+                _installProgress.value = current
+                tempArchive.delete()
+                return@launch
+            }
+
+            // Stage 4: LINKING (POSIX Execution Shim)
+            val currentLink = _installProgress.value.toMutableMap()
+            currentLink[pkgId] = InstallProgress(
+                stage = InstallStage.LINKING,
+                progressPercent = 90,
+                detailMessage = "Generating POSIX execution shim..."
+            )
+            _installProgress.value = currentLink
+
+            val targetBinary = File(storeDir, packageRecord.primaryBinary)
+            val commandName = if (packageRecord.primaryBinary.contains("/")) {
+                packageRecord.primaryBinary.substringAfterLast("/")
+            } else {
+                packageRecord.id.removePrefix("core-").split("-").firstOrNull() ?: packageRecord.name
+            }
+
+            val resolvedBinary = if (targetBinary.exists()) {
+                targetBinary
+            } else {
+                storeDir.walkTopDown().firstOrNull { it.isFile && it.name == commandName && it.canExecute() }
+                    ?: storeDir.walkTopDown().firstOrNull { it.isFile && it.name == commandName }
+                    ?: targetBinary
+            }
+
+            shimGenerator.generateShim(
+                BinaryShimGenerator.ShimConfiguration(
+                    commandName = commandName,
+                    targetBinary = resolvedBinary,
+                    prefixDir = storeDir,
+                    environmentVariables = packageRecord.environmentVariables
+                )
+            )
+
+            // Stage 5: COMPLETED
+            searchDb.setInstalled(pkgId, true)
+            val currentComplete = _installProgress.value.toMutableMap()
+            currentComplete[pkgId] = InstallProgress(
+                stage = InstallStage.COMPLETED,
+                progressPercent = 100,
+                detailMessage = "Installed ${packageRecord.name} successfully"
+            )
+            _installProgress.value = currentComplete
+
+            recordActivity("Package installed", "Installed ${packageRecord.name} (${packageRecord.version})", "INSTALLED")
+            tempArchive.delete()
+
+            // Refresh search results so isInstalled updates in UI
+            searchPackagesSync(_searchQuery.value)
         }
     }
 

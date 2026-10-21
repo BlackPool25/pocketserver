@@ -120,9 +120,19 @@ class UnifiedPackageSearchDb(
         if (packages.isEmpty()) return
 
         lock.write {
+            val previouslyInstalled = mutableSetOf<String>()
+            try {
+                database.rawQuery("SELECT id FROM packages_meta WHERE is_installed = 1;", null).use { c ->
+                    while (c.moveToNext()) {
+                        previouslyInstalled.add(c.getString(0))
+                    }
+                }
+            } catch (ignored: Exception) {}
+
             database.beginTransaction()
             try {
                 for (pkg in packages) {
+                    val isInstalled = pkg.isInstalled || previouslyInstalled.contains(pkg.id)
                     val cv = ContentValues().apply {
                         put("id", pkg.id)
                         put("name", pkg.name)
@@ -136,7 +146,7 @@ class UnifiedPackageSearchDb(
                         put("download_url", pkg.downloadUrl)
                         put("sha256", pkg.sha256Checksum)
                         put("primary_binary", pkg.primaryBinary)
-                        put("is_installed", if (pkg.isInstalled) 1 else 0)
+                        put("is_installed", if (isInstalled) 1 else 0)
                         put("dependencies", JSONArray(pkg.dependencies).toString())
                         put("env_json", JSONObject(pkg.environmentVariables).toString())
                     }

@@ -44,7 +44,13 @@ class ProcessSupervisorTest {
             assertThat(supervisor.state.value).isInstanceOf(ServiceProcessState.Sleeping::class.java)
 
             // Verify process state in procfs is 'T' (stopped)
-            val procState = NativeEngine.getProcessState(pid)
+            var procState = NativeEngine.getProcessState(pid)
+            var retries = 0
+            while (procState != "T" && retries < 20) {
+                Thread.sleep(20)
+                procState = NativeEngine.getProcessState(pid)
+                retries++
+            }
             assertThat(procState).isEqualTo("T")
 
             // Wake via SIGCONT

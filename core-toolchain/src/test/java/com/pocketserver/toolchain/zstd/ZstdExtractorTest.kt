@@ -45,6 +45,57 @@ class ZstdExtractorTest {
         assertThat(configJson.readText()).contains("val")
     }
 
+    @Test
+    fun `extractArchiveFile extracts zip archives correctly`() {
+        val destDir = tempFolder.newFolder("extracted_zip")
+        val zipFile = tempFolder.newFile("sample.zip")
+
+        java.util.zip.ZipOutputStream(zipFile.outputStream()).use { zos ->
+            val entry = java.util.zip.ZipEntry("bun-linux-aarch64-android/bun")
+            zos.putNextEntry(entry)
+            zos.write("#!/bin/sh\necho bun".toByteArray())
+            zos.closeEntry()
+        }
+
+        val result = extractor.extractArchiveFile(zipFile, destDir)
+        assertThat(result.totalFilesExtracted).isEqualTo(1)
+
+        val extractedBun = File(destDir, "bun-linux-aarch64-android/bun")
+        assertThat(extractedBun.exists()).isTrue()
+        assertThat(extractedBun.readText()).contains("bun")
+        assertThat(extractedBun.canExecute()).isTrue()
+    }
+
+    @Test
+    fun `extractArchiveFile extracts targz archives correctly`() {
+        val destDir = tempFolder.newFolder("extracted_targz")
+        val tarGzFile = tempFolder.newFile("sample.tar.gz")
+
+        val byteOut = ByteArrayOutputStream()
+        java.util.zip.GZIPOutputStream(byteOut).use { gzOut ->
+            TarArchiveOutputStream(gzOut).use { tarOut ->
+                val bytes = "#!/bin/sh\necho caddy".toByteArray()
+                val entry = TarArchiveEntry("caddy").apply {
+                    size = bytes.size.toLong()
+                    mode = 0b111_101_101
+                }
+                tarOut.putArchiveEntry(entry)
+                tarOut.write(bytes)
+                tarOut.closeArchiveEntry()
+                tarOut.finish()
+            }
+        }
+        tarGzFile.writeBytes(byteOut.toByteArray())
+
+        val result = extractor.extractArchiveFile(tarGzFile, destDir)
+        assertThat(result.totalFilesExtracted).isEqualTo(1)
+
+        val extractedCaddy = File(destDir, "caddy")
+        assertThat(extractedCaddy.exists()).isTrue()
+        assertThat(extractedCaddy.readText()).contains("caddy")
+        assertThat(extractedCaddy.canExecute()).isTrue()
+    }
+
     private data class TarItem(val path: String, val content: String, val mode: Int)
 
     private fun createSyntheticTarZst(items: List<TarItem>): ByteArray {

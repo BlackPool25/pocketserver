@@ -47,7 +47,8 @@ data class HubPackageDescriptor(
     val defaultPort: Int,
     val environmentVariables: Map<String, String> = emptyMap(),
     val helloWorldScript: String = "",
-    val helloWorldCommand: List<String> = emptyList()
+    val helloWorldCommand: List<String> = emptyList(),
+    val downloadUrl: String? = null
 ) {
     val upstreamSizeMb: Double get() = upstreamSizeBytes.toDouble() / (1024.0 * 1024.0)
     val strippedSizeMb: Double get() = strippedSizeBytes.toDouble() / (1024.0 * 1024.0)
@@ -67,7 +68,7 @@ data class HubPackageDescriptor(
             sizeCompressedBytes = strippedSizeBytes,
             installedSizeBytes = upstreamSizeBytes,
             sourceRepo = "PocketHub Core",
-            downloadUrl = "https://hub.pocketserver.org/packages/$archiveFileName",
+            downloadUrl = downloadUrl ?: "https://github.com/BlackPool25/pocketserver/releases/download/toolchain-v1/$archiveFileName",
             sha256Checksum = sha256Checksum,
             primaryBinary = primaryBinaryRelPath,
             isInstalled = false,

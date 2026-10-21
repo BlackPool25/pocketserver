@@ -16,6 +16,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -163,5 +164,70 @@ class PocketServerViewModelTest {
         val removed = viewModel.removeCustomRepository("custom-test-repo")
         assertThat(removed).isTrue()
         assertThat(viewModel.customRepositories.value.size).isEqualTo(initialCount)
+    }
+
+    @Test
+    fun testInstallPackageCompletesFullPipeline() = runTest(testDispatcher) {
+        val archiveBytes = java.io.ByteArrayOutputStream().apply {
+            java.util.zip.ZipOutputStream(this).use { zos ->
+                val entry = java.util.zip.ZipEntry("bun-linux-aarch64-android/bun")
+                zos.putNextEntry(entry)
+                zos.write("#!/bin/sh\necho bun".toByteArray())
+                zos.closeEntry()
+            }
+        }.toByteArray()
+
+        val mockDownloader = object : com.pocketserver.hub.download.PackageDownloader() {
+            override suspend fun downloadArchive(
+                downloadUrl: String,
+                destinationFile: File,
+                expectedSha256: String?,
+                onProgress: (com.pocketserver.hub.download.InstallProgress) -> Unit
+            ): Result<File> {
+                destinationFile.parentFile?.mkdirs()
+                destinationFile.writeBytes(archiveBytes)
+                onProgress(
+                    com.pocketserver.hub.download.InstallProgress(
+                        stage = com.pocketserver.hub.download.InstallStage.VERIFYING,
+                        progressPercent = 100
+                    )
+                )
+                return Result.success(destinationFile)
+            }
+        }
+
+        val vm = PocketServerViewModel(
+            context = context,
+            database = database,
+            searchDb = searchDb,
+            downloader = mockDownloader,
+            ioDispatcher = testDispatcher
+        )
+
+        val archiveSha256 = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(archiveBytes)
+            .joinToString("") { "%02x".format(it) }
+
+        val bunRecord = com.pocketserver.hub.registry.HubPackageRegistry.findByRuntime(
+            com.pocketserver.hub.model.PolyglotRuntime.JAVASCRIPT
+        )!!.toUnifiedRecord().copy(sha256Checksum = archiveSha256)
+
+        vm.searchDb.indexPackages(listOf(bunRecord))
+        vm.installPackage(bunRecord).join()
+
+        // Verify progress is COMPLETED
+        val progress = vm.installProgress.value[bunRecord.id]
+        assertThat(progress).isNotNull()
+        assertThat(progress?.stage).isEqualTo(com.pocketserver.hub.download.InstallStage.COMPLETED)
+
+        // Verify marked as installed in search DB
+        val updated = vm.searchDb.getPackageById(bunRecord.id)
+        assertThat(updated?.isInstalled).isTrue()
+
+        // Verify shim generated in files/bin
+        val binDir = File(context.filesDir, "bin")
+        val shimFile = File(binDir, "bun")
+        assertThat(shimFile.exists()).isTrue()
+        assertThat(shimFile.canExecute()).isTrue()
     }
 }

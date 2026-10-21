@@ -98,7 +98,8 @@ class ToolchainIngestionPipeline(
 
         // Stage 4: Verify 16 KB ELF Alignment across all extracted binaries
         val scanResult = elfAlignmentEngine.scanDirectory(stagingDir)
-        if (!scanResult.isFully16KbCompliant) {
+        val enforce16Kb = android.os.Build.VERSION.SDK_INT >= 35
+        if (enforce16Kb && !scanResult.isFully16KbCompliant) {
             val badFiles = scanResult.nonCompliantFiles.joinToString { it.name }
             stagingDir.deleteRecursively()
             return PipelineResult(
@@ -117,7 +118,7 @@ class ToolchainIngestionPipeline(
             expectedHash = computedSha256,
             packageName = packageName,
             version = version,
-            is16KbAligned = true
+            is16KbAligned = scanResult.isFully16KbCompliant
         )
 
         return if (commitResult.isSuccess) {

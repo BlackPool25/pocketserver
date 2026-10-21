@@ -48,10 +48,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import com.pocketserver.hub.download.InstallProgress
+import com.pocketserver.hub.download.InstallStage
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pocketserver.R
-import com.pocketserver.hub.download.InstallStage
 import com.pocketserver.hub.search.PackageTier
 import com.pocketserver.hub.search.UnifiedPackageRecord
 import com.pocketserver.ui.components.ErrorState
@@ -237,8 +238,10 @@ fun PackagesScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(searchResults, key = { it.id }) { pkg ->
+                        val progress = installProgressMap[pkg.id]
                         PackageCardRow(
                             pkg = pkg,
+                            progress = progress,
                             onClick = { activeDetailPackage = pkg },
                             onInstall = {
                                 viewModel.installPackage(pkg)
@@ -399,26 +402,49 @@ fun PackagesScreen(
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             val stageText = when (progress.stage) {
-                                InstallStage.DOWNLOADING -> "Downloading…"
-                                InstallStage.VERIFYING -> "Verifying…"
-                                InstallStage.EXTRACTING -> "Extracting…"
-                                InstallStage.LINKING -> "Linking…"
-                                InstallStage.FAILED -> "Failed"
+                                InstallStage.DOWNLOADING -> "Downloading package…"
+                                InstallStage.VERIFYING -> "Verifying checksum…"
+                                InstallStage.EXTRACTING -> "Extracting hermetic archive…"
+                                InstallStage.LINKING -> "Generating execution shims…"
+                                InstallStage.FAILED -> "Installation failed"
                                 else -> "Processing…"
                             }
-                            Text(stageText, style = typography.bodyMedium, color = colors.textPrimary)
-                            Text("${progress.progressPercent}%", style = typography.mono, color = colors.textSecondary)
+                            Text(
+                                text = stageText,
+                                style = typography.bodyMedium,
+                                color = if (progress.stage == InstallStage.FAILED) colors.error else colors.textPrimary
+                            )
+                            if (progress.stage != InstallStage.FAILED) {
+                                Text("${progress.progressPercent}%", style = typography.mono, color = colors.textSecondary)
+                            }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         LinearProgressIndicator(
                             progress = { progress.progressPercent / 100f },
                             modifier = Modifier.fillMaxWidth(),
-                            color = colors.accent,
+                            color = if (progress.stage == InstallStage.FAILED) colors.error else colors.accent,
                             trackColor = colors.surface
                         )
+                        if (progress.stage == InstallStage.FAILED) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = progress.detailMessage,
+                                style = typography.caption,
+                                color = colors.error,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            PocketButton(
+                                onClick = { viewModel.installPackage(pkg) },
+                                variant = PocketButtonVariant.Primary,
+                                text = "Retry installation",
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 } else if (progress?.stage == InstallStage.COMPLETED || pkg.isInstalled) {
                     PocketButton(
@@ -445,6 +471,7 @@ fun PackagesScreen(
 @Composable
 private fun PackageCardRow(
     pkg: UnifiedPackageRecord,
+    progress: InstallProgress?,
     onClick: () -> Unit,
     onInstall: () -> Unit
 ) {
@@ -494,20 +521,54 @@ private fun PackageCardRow(
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
-            if (pkg.isInstalled) {
-                PocketButton(
-                    onClick = onClick,
-                    variant = PocketButtonVariant.Secondary,
-                    size = PocketButtonSize.Compact,
-                    text = "Installed"
-                )
-            } else {
-                PocketButton(
-                    onClick = onInstall,
-                    variant = PocketButtonVariant.Primary,
-                    size = PocketButtonSize.Compact,
-                    text = "Install"
-                )
+            val isInstalling = progress != null && progress.stage in listOf(
+                InstallStage.DOWNLOADING,
+                InstallStage.VERIFYING,
+                InstallStage.EXTRACTING,
+                InstallStage.LINKING
+            )
+            val isFailed = progress?.stage == InstallStage.FAILED
+
+            when {
+                pkg.isInstalled || progress?.stage == InstallStage.COMPLETED -> {
+                    PocketButton(
+                        onClick = onClick,
+                        variant = PocketButtonVariant.Secondary,
+                        size = PocketButtonSize.Compact,
+                        text = "Installed"
+                    )
+                }
+                isInstalling -> {
+                    val progressText = when (progress?.stage) {
+                        InstallStage.DOWNLOADING -> "${progress.progressPercent}%"
+                        InstallStage.EXTRACTING -> "Unpacking…"
+                        InstallStage.LINKING -> "Linking…"
+                        else -> "Verifying…"
+                    }
+                    PocketButton(
+                        onClick = onClick,
+                        variant = PocketButtonVariant.Secondary,
+                        size = PocketButtonSize.Compact,
+                        loading = true,
+                        text = progressText
+                    )
+                }
+                isFailed -> {
+                    PocketButton(
+                        onClick = onInstall,
+                        variant = PocketButtonVariant.Destructive,
+                        size = PocketButtonSize.Compact,
+                        text = "Retry"
+                    )
+                }
+                else -> {
+                    PocketButton(
+                        onClick = onInstall,
+                        variant = PocketButtonVariant.Primary,
+                        size = PocketButtonSize.Compact,
+                        text = "Install"
+                    )
+                }
             }
         }
     }

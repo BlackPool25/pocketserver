@@ -92,11 +92,134 @@ class ZstdExtractor {
     }
 
     /**
-     * Convenience method to extract a .tar.zst file from disk.
+     * Extracts an archive file (.tar.zst, .zip, or .tar.gz/.tgz) into the target directory.
      */
     fun extractArchiveFile(archiveFile: File, destinationDir: File): ExtractionResult {
-        return archiveFile.inputStream().use { stream ->
-            extractTarZstStream(stream, destinationDir)
+        val lowerName = archiveFile.name.lowercase()
+        return when {
+            lowerName.endsWith(".zip") -> extractZipFile(archiveFile, destinationDir)
+            lowerName.endsWith(".tar.gz") || lowerName.endsWith(".tgz") -> extractTarGzFile(archiveFile, destinationDir)
+            else -> archiveFile.inputStream().use { stream ->
+                extractTarZstStream(stream, destinationDir)
+            }
         }
+    }
+
+    /**
+     * Extracts a standard .zip archive into the target directory, preserving executable bits.
+     */
+    fun extractZipFile(archiveFile: File, destinationDir: File): ExtractionResult {
+        destinationDir.mkdirs()
+        val startTime = System.currentTimeMillis()
+        var filesExtracted = 0
+        var totalBytes = 0L
+        val canonicalDest = destinationDir.canonicalPath
+        val buffer = ByteArray(BUFFER_SIZE)
+
+        java.util.zip.ZipInputStream(BufferedInputStream(archiveFile.inputStream(), BUFFER_SIZE)).use { zipIn ->
+            var entry = zipIn.nextEntry
+            while (entry != null) {
+                val outputFile = File(destinationDir, entry.name)
+                val canonicalOut = outputFile.canonicalPath
+                if (!canonicalOut.startsWith(canonicalDest)) {
+                    throw SecurityException("Illegal directory traversal entry: ${entry.name}")
+                }
+
+                if (entry.isDirectory) {
+                    outputFile.mkdirs()
+                } else {
+                    outputFile.parentFile?.mkdirs()
+                    FileOutputStream(outputFile).use { fos ->
+                        var bytesRead: Int
+                        while (zipIn.read(buffer).also { bytesRead = it } != -1) {
+                            fos.write(buffer, 0, bytesRead)
+                            totalBytes += bytesRead
+                        }
+                    }
+
+                    if (outputFile.parentFile?.name == "bin" ||
+                        outputFile.name in listOf("bun", "caddy", "uv", "duckdb", "go", "zig") ||
+                        outputFile.name.endsWith(".so") ||
+                        !outputFile.name.contains(".")
+                    ) {
+                        outputFile.setExecutable(true, false)
+                    }
+                    outputFile.setReadable(true, false)
+                    filesExtracted++
+                }
+                zipIn.closeEntry()
+                entry = zipIn.nextEntry
+            }
+        }
+
+        val elapsed = System.currentTimeMillis() - startTime
+        return ExtractionResult(
+            totalFilesExtracted = filesExtracted,
+            totalBytesUncompressed = totalBytes,
+            elapsedTimeMs = elapsed
+        )
+    }
+
+    /**
+     * Extracts a .tar.gz or .tgz archive into the target directory.
+     */
+    fun extractTarGzFile(archiveFile: File, destinationDir: File): ExtractionResult {
+        destinationDir.mkdirs()
+        val startTime = System.currentTimeMillis()
+        var filesExtracted = 0
+        var totalBytes = 0L
+        val canonicalDest = destinationDir.canonicalPath
+        val buffer = ByteArray(BUFFER_SIZE)
+
+        BufferedInputStream(archiveFile.inputStream(), BUFFER_SIZE).use { bufferedIn ->
+            java.util.zip.GZIPInputStream(bufferedIn).use { gzipIn ->
+                TarArchiveInputStream(gzipIn).use { tarIn ->
+                    var entry = tarIn.nextEntry
+                    while (entry != null) {
+                        val outputFile = File(destinationDir, entry.name)
+                        val canonicalOut = outputFile.canonicalPath
+                        if (!canonicalOut.startsWith(canonicalDest)) {
+                            throw SecurityException("Illegal directory traversal entry: ${entry.name}")
+                        }
+
+                        if (entry.isDirectory) {
+                            outputFile.mkdirs()
+                        } else if (entry.isSymbolicLink) {
+                            outputFile.parentFile?.mkdirs()
+                            NativeEngine.createRelativeSymlink(entry.linkName, outputFile)
+                            filesExtracted++
+                        } else {
+                            outputFile.parentFile?.mkdirs()
+                            FileOutputStream(outputFile).use { fos ->
+                                var bytesRead: Int
+                                while (tarIn.read(buffer).also { bytesRead = it } != -1) {
+                                    fos.write(buffer, 0, bytesRead)
+                                    totalBytes += bytesRead
+                                }
+                            }
+
+                            if ((entry.mode and 0b001_001_001) != 0 ||
+                                outputFile.parentFile?.name == "bin" ||
+                                outputFile.name in listOf("bun", "caddy", "uv", "duckdb", "go", "zig") ||
+                                outputFile.name.endsWith(".so")
+                            ) {
+                                outputFile.setExecutable(true, false)
+                            }
+                            outputFile.setReadable(true, false)
+                            filesExtracted++
+                        }
+
+                        entry = tarIn.nextEntry
+                    }
+                }
+            }
+        }
+
+        val elapsed = System.currentTimeMillis() - startTime
+        return ExtractionResult(
+            totalFilesExtracted = filesExtracted,
+            totalBytesUncompressed = totalBytes,
+            elapsedTimeMs = elapsed
+        )
     }
 }

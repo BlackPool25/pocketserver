@@ -22,11 +22,12 @@ object HubPackageRegistry {
             engineVersion = "3.12.7",
             upstreamSizeBytes = 375L * 1024L * 1024L,
             strippedSizeBytes = 28L * 1024L * 1024L,
-            sha256Checksum = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            archiveFileName = "cpython-3.12-uv-arm64.tar.zst",
+            sha256Checksum = "42ce9a728ecd054268ba5a621002385e79ea10ba4546a8a6a695f430902029f5",
+            archiveFileName = "uv-aarch64-unknown-linux-musl.tar.gz",
             primaryBinaryRelPath = "bin/python3",
             strippingMethod = "Headless, stripped test/tkinter, static OpenSSL",
             defaultPort = 8000,
+            downloadUrl = "https://github.com/astral-sh/uv/releases/download/0.5.26/uv-aarch64-unknown-linux-musl.tar.gz",
             environmentVariables = mapOf(
                 "PYTHONUNBUFFERED" to "1",
                 "PYTHONDONTWRITEBYTECODE" to "1"
@@ -45,19 +46,20 @@ object HubPackageRegistry {
             helloWorldCommand = listOf("bin/python3", "main.py")
         ),
 
-        // 2. JavaScript / TypeScript: Bun 1.2
+        // 2. JavaScript / TypeScript: Bun
         HubPackageDescriptor(
             runtime = PolyglotRuntime.JAVASCRIPT,
             category = RuntimeCategory.LANGUAGE_RUNTIME,
-            packageName = "bun-1.2",
-            engineVersion = "1.2.0",
+            packageName = "bun-1.4",
+            engineVersion = "1.4.3",
             upstreamSizeBytes = 165L * 1024L * 1024L,
-            strippedSizeBytes = 48L * 1024L * 1024L,
-            sha256Checksum = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000001",
-            archiveFileName = "bun-1.2-linux-arm64.tar.zst",
+            strippedSizeBytes = 33L * 1024L * 1024L,
+            sha256Checksum = "e8848b6c67769ef1dcf932c1aabafbeaefdea0dd98f715e9455424998242deda",
+            archiveFileName = "bun-linux-aarch64-android.zip",
             primaryBinaryRelPath = "bin/bun",
-            strippingMethod = "Single static binary, replaces Node+npm+tsc",
+            strippingMethod = "Official Bun Android aarch64 NDK 28 binary",
             defaultPort = 3000,
+            downloadUrl = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.3/bun-linux-aarch64-android.zip",
             environmentVariables = mapOf(
                 "NODE_ENV" to "production"
             ),
@@ -66,7 +68,7 @@ object HubPackageRegistry {
                   port: 3000,
                   hostname: "127.0.0.1",
                   fetch(req) {
-                    return new Response("Hello from PocketServer Bun 1.2\n");
+                    return new Response("Hello from PocketServer Bun\n");
                   },
                 });
             """.trimIndent(),
@@ -80,12 +82,13 @@ object HubPackageRegistry {
             packageName = "go-1.23",
             engineVersion = "1.23.2",
             upstreamSizeBytes = 360L * 1024L * 1024L,
-            strippedSizeBytes = 65L * 1024L * 1024L,
-            sha256Checksum = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000002",
-            archiveFileName = "go-1.23-linux-arm64.tar.zst",
+            strippedSizeBytes = 67L * 1024L * 1024L,
+            sha256Checksum = "f626cdd92fc21a88b31c1251f419c17782933a42903db87a174ce74eeecc66a9",
+            archiveFileName = "go1.23.2.linux-arm64.tar.gz",
             primaryBinaryRelPath = "bin/go",
-            strippingMethod = "Stripped cross-compilers, tests, and docs",
+            strippingMethod = "Official Go linux-arm64 toolchain distribution",
             defaultPort = 8080,
+            downloadUrl = "https://go.dev/dl/go1.23.2.linux-arm64.tar.gz",
             environmentVariables = mapOf(
                 "CGO_ENABLED" to "0"
             ),
@@ -250,19 +253,20 @@ object HubPackageRegistry {
             helloWorldCommand = listOf("bin/sqlite3", ":memory:")
         ),
 
-        // 13. DuckDB: DuckDB 1.0 Embedded
+        // 13. DuckDB: DuckDB 1.1 Embedded
         HubPackageDescriptor(
             runtime = PolyglotRuntime.DUCKDB,
             category = RuntimeCategory.DATABASE_ENGINE,
-            packageName = "duckdb-1.0",
-            engineVersion = "1.0.0",
-            upstreamSizeBytes = 85L * 1024L * 1024L,
-            strippedSizeBytes = 22L * 1024L * 1024L,
-            sha256Checksum = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000012",
-            archiveFileName = "duckdb-1.0-cli-arm64.tar.zst",
-            primaryBinaryRelPath = "bin/duckdb",
-            strippingMethod = "Single binary CLI / embedded shared libs",
+            packageName = "duckdb-1.1",
+            engineVersion = "1.1.3",
+            upstreamSizeBytes = 45L * 1024L * 1024L,
+            strippedSizeBytes = 16L * 1024L * 1024L,
+            sha256Checksum = "6e6caaab69a9c8d77c4400e88197695b072a98b678f6f8ffb015af4f02b13618",
+            archiveFileName = "duckdb_cli-linux-aarch64.zip",
+            primaryBinaryRelPath = "duckdb",
+            strippingMethod = "Official standalone Linux ARM64 CLI",
             defaultPort = 0,
+            downloadUrl = "https://github.com/duckdb/duckdb/releases/download/v1.1.3/duckdb_cli-linux-aarch64.zip",
             helloWorldCommand = listOf("bin/duckdb", ":memory:")
         ),
 
@@ -272,13 +276,14 @@ object HubPackageRegistry {
             category = RuntimeCategory.WEB_INFRASTRUCTURE,
             packageName = "caddy-2.8",
             engineVersion = "2.8.4",
-            upstreamSizeBytes = 65L * 1024L * 1024L,
-            strippedSizeBytes = 16L * 1024L * 1024L,
-            sha256Checksum = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000013",
-            archiveFileName = "caddy-2.8-proxy-arm64.tar.zst",
-            primaryBinaryRelPath = "bin/caddy",
+            upstreamSizeBytes = 38L * 1024L * 1024L,
+            strippedSizeBytes = 13L * 1024L * 1024L,
+            sha256Checksum = "93a3eb31883d678c6590c6d823eb6bb9f7a3af66dcd9d53df3eb2c7528b2af05",
+            archiveFileName = "caddy_2.8.4_linux_arm64.tar.gz",
+            primaryBinaryRelPath = "caddy",
             strippingMethod = "Single Go binary with automatic HTTPS/SPA",
             defaultPort = 2019,
+            downloadUrl = "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_linux_arm64.tar.gz",
             helloWorldCommand = listOf("bin/caddy", "run")
         )
     ).associateBy { it.runtime }

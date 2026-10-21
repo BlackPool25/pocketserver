@@ -38,7 +38,7 @@ data class InstallProgress(
  * Streams package archives (.tar.zst) into a temporary download cache, computes
  * streaming SHA-256 digests, and dispatches fine-grained stage progress callbacks.
  */
-class PackageDownloader(
+open class PackageDownloader(
     private val client: OkHttpClient = defaultClient()
 ) {
     companion object {
@@ -55,7 +55,7 @@ class PackageDownloader(
      * Downloads an archive file from [downloadUrl] into [destinationFile].
      * Dispatches progress updates via [onProgress].
      */
-    suspend fun downloadArchive(
+    open suspend fun downloadArchive(
         downloadUrl: String,
         destinationFile: File,
         expectedSha256: String? = null,
