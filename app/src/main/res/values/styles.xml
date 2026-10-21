@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.PocketServer" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/zinc_950</item>
+        <item name="android:colorBackground">@color/zinc_950</item>
+        <item name="colorSurface">@color/zinc_900</item>
+        <item name="colorPrimary">@color/brand_indigo</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">@color/brand_indigo</item>
+        <item name="colorOnSurface">@color/zinc_100</item>
+        <item name="android:textColorPrimary">@color/zinc_100</item>
+        <item name="android:textColorSecondary">@color/zinc_400</item>
+        <item name="android:statusBarColor">@color/zinc_950</item>
+        <item name="android:navigationBarColor">@color/zinc_950</item>
+    </style>
+</resources>

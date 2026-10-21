@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Zinc 950 Human-Centric Dark Color System -->
+    <color name="zinc_950">#09090B</color> <!-- Canvas Background -->
+    <color name="zinc_900">#18181B</color> <!-- Card Surface -->
+    <color name="zinc_800">#27272A</color> <!-- Interactive Inputs & Borders -->
+    <color name="zinc_700">#3F3F46</color>
+    <color name="zinc_400">#A1A1AA</color> <!-- Secondary / Subtitles -->
+    <color name="zinc_100">#F4F4F5</color> <!-- Primary High-Contrast Text -->
+
+    <!-- Status & Accent Colors -->
+    <color name="brand_indigo">#6366F1</color> <!-- Refined Indigo / Blurple Accent -->
+    <color name="status_live_emerald">#10B981</color> <!-- Soft Sage Emerald -->
+    <color name="status_sleeping_slate">#64748B</color> <!-- Soft Slate Blue -->
+    <color name="status_attention_amber">#F59E0B</color> <!-- Warm Amber -->
+    <color name="status_stopped_rose">#F43F5E</color> <!-- Muted Rose -->
+</resources>

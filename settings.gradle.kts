@@ -22,6 +22,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "pocketserver"
 
+include(":app")
 include(":native-engine")
 include(":core-persistence")
 include(":core-storage")
