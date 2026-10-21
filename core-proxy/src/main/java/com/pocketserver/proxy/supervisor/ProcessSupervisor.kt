@@ -1,6 +1,7 @@
 package com.pocketserver.proxy.supervisor
 
 import com.pocketserver.nativeengine.NativeEngine
+import com.pocketserver.proxy.database.DatabasePrePingInjector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -54,15 +55,13 @@ class ProcessSupervisor(
     var wakeCount: Long = 0L
         private set
 
+    private val dbPrePingInjector = DatabasePrePingInjector()
+
     /**
      * Injects database pool resilience environment variables into the process environment.
      */
     fun injectEnvironment(baseEnv: Map<String, String>): Map<String, String> {
-        val merged = baseEnv.toMutableMap()
-        for ((key, value) in DB_PREPING_ENV) {
-            merged.putIfAbsent(key, value)
-        }
-        return merged
+        return dbPrePingInjector.generateEnvironment(baseEnv)
     }
 
     /**
