@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/pocketserver_logo.png" alt="PocketServer Logo" width="128" height="128" style="border-radius: 28px; margin-bottom: 16px;" />
+
 # PocketServer
 
 ### Local Web Service & Polyglot Container Host for Unrooted Android Devices

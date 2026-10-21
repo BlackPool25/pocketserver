@@ -7,15 +7,17 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".PocketServerApplication"
         android:allowBackup="false"
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:icon="@mipmap/ic_launcher"
         android:label="PocketServer"
-        android:roundIcon="@android:drawable/sym_def_app_icon"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PocketServer">
 
@@ -33,7 +35,7 @@
         <service
             android:name=".ui.system.PocketServerTileService"
             android:exported="true"
-            android:icon="@android:drawable/ic_dialog_info"
+            android:icon="@drawable/ic_qs_pocketserver"
             android:label="PocketServer"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>

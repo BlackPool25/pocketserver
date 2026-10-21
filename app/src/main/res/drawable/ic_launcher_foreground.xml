@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Central Safe-Zone Group (Within 66dp Safe Area: x from 24 to 84, y from 24 to 84) -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54">
+
+        <!-- Server Rack Rails (Left & Right) -->
+        <path
+            android:fillColor="#3F3F46"
+            android:pathData="M31,34h2v40h-2z" />
+        <path
+            android:fillColor="#3F3F46"
+            android:pathData="M75,34h2v40h-2z" />
+
+        <!-- Rail Mount Pins -->
+        <path
+            android:fillColor="#6366F1"
+            android:pathData="M31,39m-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0" />
+        <path
+            android:fillColor="#6366F1"
+            android:pathData="M31,54m-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0" />
+        <path
+            android:fillColor="#6366F1"
+            android:pathData="M31,69m-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0" />
+        <path
+            android:fillColor="#6366F1"
+            android:pathData="M77,39m-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0" />
+        <path
+            android:fillColor="#6366F1"
+            android:pathData="M77,54m-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0" />
+        <path
+            android:fillColor="#6366F1"
+            android:pathData="M77,69m-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0" />
+
+        <!-- Blade 3 (Bottom): Base Sysroot -->
+        <path
+            android:fillColor="#18181B"
+            android:strokeColor="#3F3F46"
+            android:strokeWidth="1"
+            android:pathData="M36,65 L72,65 A2,2 0 0 1 74,67 L74,71 A2,2 0 0 1 72,73 L36,73 A2,2 0 0 1 34,71 L34,67 A2,2 0 0 1 36,65 Z" />
+        <!-- Blade 3 Status LED (Sage) -->
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M39,69m-1.5,0a1.5,1.5 0 1,0 3,0a1.5,1.5 0 1,0 -3,0" />
+        <!-- Blade 3 Slots -->
+        <path
+            android:fillColor="#27272A"
+            android:pathData="M48,68h5v2h-5z" />
+        <path
+            android:fillColor="#27272A"
+            android:pathData="M56,68h5v2h-5z" />
+        <path
+            android:fillColor="#27272A"
+            android:pathData="M64,68h5v2h-5z" />
+
+        <!-- Blade 2 (Middle): Storage & Container Fabric -->
+        <path
+            android:fillColor="#18181B"
+            android:strokeColor="#6366F1"
+            android:strokeWidth="1"
+            android:pathData="M36,50 L72,50 A2,2 0 0 1 74,52 L74,56 A2,2 0 0 1 72,58 L36,58 A2,2 0 0 1 34,56 L34,52 A2,2 0 0 1 36,50 Z" />
+        <!-- Blade 2 Status LED (Cyan) -->
+        <path
+            android:fillColor="#22D3EE"
+            android:pathData="M39,54m-1.5,0a1.5,1.5 0 1,0 3,0a1.5,1.5 0 1,0 -3,0" />
+        <!-- Blade 2 Slots -->
+        <path
+            android:fillColor="#312E81"
+            android:pathData="M48,53h5v2h-5z" />
+        <path
+            android:fillColor="#312E81"
+            android:pathData="M56,53h5v2h-5z" />
+        <path
+            android:fillColor="#312E81"
+            android:pathData="M64,53h5v2h-5z" />
+
+        <!-- Blade 1 (Top): Active Master Node -->
+        <path
+            android:fillColor="#2E1065"
+            android:strokeColor="#818CF8"
+            android:strokeWidth="1.2"
+            android:pathData="M36,35 L72,35 A2,2 0 0 1 74,37 L74,41 A2,2 0 0 1 72,43 L36,43 A2,2 0 0 1 34,41 L34,37 A2,2 0 0 1 36,35 Z" />
+        <!-- Blade 1 Status Glow & Active Dot (Emerald/Sage) -->
+        <path
+            android:fillColor="#34D399"
+            android:pathData="M39,39m-1.5,0a1.5,1.5 0 1,0 3,0a1.5,1.5 0 1,0 -3,0" />
+        
+        <!-- Terminal Prompt on Blade 1: "> _" -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#C7D2FE"
+            android:strokeWidth="1"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M48,37.5 L50.5,39 L48,40.5" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#C7D2FE"
+            android:strokeWidth="1"
+            android:strokeLineCap="round"
+            android:pathData="M53,40.5 L57,40.5" />
+
+        <!-- Bottom Hyper-Link Socket -->
+        <path
+            android:fillColor="#27272A"
+            android:strokeColor="#6366F1"
+            android:strokeWidth="0.8"
+            android:pathData="M50,77 L58,77 A1,1 0 0 1 59,78 L59,79 A1,1 0 0 1 58,80 L50,80 A1,1 0 0 1 49,79 L49,78 A1,1 0 0 1 50,77 Z" />
+    </group>
+</vector>

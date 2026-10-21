@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -14,17 +16,25 @@
         <service
             android:name="com.pocketserver.persistence.vpn.PocketServerVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="systemExempted"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="PocketServer loopback persistence shield" />
         </service>
 
         <!-- The Primary PocketServer Host Orchestration Service -->
         <service
             android:name="com.pocketserver.persistence.host.PocketServerHostService"
             android:exported="false"
-            android:foregroundServiceType="specialUse" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="PocketServer local web and container hosting engine" />
+        </service>
 
         <!-- Direct Boot and Normal Boot Auto-Restart Receiver for 24/7 Server Mode -->
         <receiver
