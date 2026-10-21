@@ -27,6 +27,12 @@ object NativeEngine {
 
     const val REQUIRED_PAGE_SIZE = 16384L // 16 KB boundary for Android 15/16
 
+    // POSIX Signal Constants
+    const val SIGTERM = 15
+    const val SIGKILL = 9
+    const val SIGSTOP = 19
+    const val SIGCONT = 18
+
     /**
      * Inspects a 64-bit ELF binary or shared object to verify that all PT_LOAD
      * segments meet the 16 KB page alignment requirement (p_align >= 16384).
@@ -103,6 +109,68 @@ object NativeEngine {
         return 4096L // Default assumed baseline in host JVM
     }
 
+    /**
+     * Sends a POSIX signal to a process group (kill(-pgid, signal)).
+     * Returns 0 on success, or negative errno on failure.
+     */
+    fun sendSignalToProcessGroup(pgid: Int, signal: Int): Int {
+        if (pgid <= 0) return -1
+        if (isNativeLoaded) {
+            return nativeSendSignalToProcessGroup(pgid, signal)
+        }
+        // JVM fallback for Linux/macOS
+        return try {
+            val process = ProcessBuilder("kill", "-$signal", "-$pgid").start()
+            val exitCode = process.waitFor()
+            if (exitCode == 0) 0 else -1
+        } catch (e: Exception) {
+            -1
+        }
+    }
+
+    /**
+     * Sends a POSIX signal to an individual process (kill(pid, signal)).
+     * Returns 0 on success, or negative errno on failure.
+     */
+    fun sendSignalToProcess(pid: Int, signal: Int): Int {
+        if (pid <= 0) return -1
+        if (isNativeLoaded) {
+            return nativeSendSignalToProcess(pid, signal)
+        }
+        // JVM fallback for Linux/macOS
+        return try {
+            val process = ProcessBuilder("kill", "-$signal", "$pid").start()
+            val exitCode = process.waitFor()
+            if (exitCode == 0) 0 else -1
+        } catch (e: Exception) {
+            -1
+        }
+    }
+
+    /**
+     * Reads the Linux process state for the given pid from /proc/<pid>/stat.
+     * Returns state character string ("R", "S", "D", "Z", "T", "t") or null if process not found.
+     * Note: "T" indicates the process is stopped by signal (SIGSTOP/SIGTSTP).
+     */
+    fun getProcessState(pid: Int): String? {
+        if (pid <= 0) return null
+        if (isNativeLoaded) {
+            return nativeGetProcessState(pid)
+        }
+        // JVM fallback
+        return try {
+            val statFile = File("/proc/$pid/stat")
+            if (!statFile.exists()) return null
+            val line = statFile.readText().trim()
+            val lastParen = line.lastIndexOf(')')
+            if (lastParen != -1 && lastParen + 2 < line.length) {
+                line.substring(lastParen + 2, lastParen + 3)
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     // --- Pure JVM ELF64 Parser for Test Verification & Host Execution ---
 
     private fun verify16KbAlignmentJvm(file: File): Boolean {
@@ -176,4 +244,7 @@ object NativeEngine {
     private external fun nativeAtomicRename(oldPath: String, newPath: String): Int
     private external fun nativeFsyncDirectory(dirPath: String): Int
     private external fun nativeGetSystemPageSize(): Long
+    private external fun nativeSendSignalToProcessGroup(pgid: Int, sig: Int): Int
+    private external fun nativeSendSignalToProcess(pid: Int, sig: Int): Int
+    private external fun nativeGetProcessState(pid: Int): String?
 }

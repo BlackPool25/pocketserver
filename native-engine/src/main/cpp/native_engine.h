@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <signal.h>
 #include <cerrno>
 #include <cstring>
 #include <string>
@@ -57,6 +58,29 @@ JNIEXPORT jlong JNICALL
 Java_com_pocketserver_nativeengine_NativeEngine_nativeGetSystemPageSize(
     JNIEnv* env,
     jobject thiz
+);
+
+JNIEXPORT jint JNICALL
+Java_com_pocketserver_nativeengine_NativeEngine_nativeSendSignalToProcessGroup(
+    JNIEnv* env,
+    jobject thiz,
+    jint pgid,
+    jint sig
+);
+
+JNIEXPORT jint JNICALL
+Java_com_pocketserver_nativeengine_NativeEngine_nativeSendSignalToProcess(
+    JNIEnv* env,
+    jobject thiz,
+    jint pid,
+    jint sig
+);
+
+JNIEXPORT jstring JNICALL
+Java_com_pocketserver_nativeengine_NativeEngine_nativeGetProcessState(
+    JNIEnv* env,
+    jobject thiz,
+    jint pid
 );
 
 #ifdef __cplusplus

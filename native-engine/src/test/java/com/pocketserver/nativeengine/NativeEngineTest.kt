@@ -61,6 +61,50 @@ class NativeEngineTest {
         assertThat(File(destination, "manifest.json").readText()).contains("ready")
     }
 
+    @Test
+    fun `sendSignalToProcess and getProcessState manage process lifecycle with SIGSTOP and SIGCONT`() {
+        val process = ProcessBuilder("sleep", "10").start()
+        val pid = extractPid(process).toInt()
+
+        try {
+            val initialState = NativeEngine.getProcessState(pid)
+            // Linux process states: 'S' (sleeping in interruptible wait) or 'R' (running)
+            assertThat(initialState).isNotNull()
+            assertThat(listOf("S", "R")).contains(initialState)
+
+            // Send SIGSTOP
+            val stopRes = NativeEngine.sendSignalToProcess(pid, NativeEngine.SIGSTOP)
+            assertThat(stopRes).isEqualTo(0)
+            Thread.sleep(100)
+
+            val stoppedState = NativeEngine.getProcessState(pid)
+            assertThat(stoppedState).isEqualTo("T")
+
+            // Send SIGCONT
+            val contRes = NativeEngine.sendSignalToProcess(pid, NativeEngine.SIGCONT)
+            assertThat(contRes).isEqualTo(0)
+            Thread.sleep(100)
+
+            val resumedState = NativeEngine.getProcessState(pid)
+            assertThat(listOf("S", "R")).contains(resumedState)
+        } finally {
+            NativeEngine.sendSignalToProcess(pid, NativeEngine.SIGKILL)
+            process.destroyForcibly()
+        }
+    }
+
+    private fun extractPid(process: Process): Long {
+        return try {
+            val method = Process::class.java.getMethod("pid")
+            (method.invoke(process) as Number).toLong()
+        } catch (e: Exception) {
+            val toHandle = Process::class.java.getMethod("toHandle")
+            val handle = toHandle.invoke(process)
+            val pidMethod = handle.javaClass.getMethod("pid")
+            (pidMethod.invoke(handle) as Number).toLong()
+        }
+    }
+
     private fun writeSyntheticElf64(destination: File, pageSize: Long) {
         val headerSize = 64
         val phdrSize = 56

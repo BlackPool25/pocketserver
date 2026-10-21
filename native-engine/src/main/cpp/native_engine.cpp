@@ -190,4 +190,76 @@ Java_com_pocketserver_nativeengine_NativeEngine_nativeGetSystemPageSize(
     return static_cast<jlong>(sysconf(_SC_PAGESIZE));
 }
 
+JNIEXPORT jint JNICALL
+Java_com_pocketserver_nativeengine_NativeEngine_nativeSendSignalToProcessGroup(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jint pgid,
+    jint sig
+) {
+    if (pgid <= 0) {
+        return -EINVAL;
+    }
+    // Sending signal to process group -pgid
+    if (kill(-pgid, sig) != 0) {
+        int err = errno;
+        LOGE("Failed to send signal %d to process group %d, errno=%d (%s)", sig, pgid, err, strerror(err));
+        return -err;
+    }
+    return 0;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_pocketserver_nativeengine_NativeEngine_nativeSendSignalToProcess(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jint pid,
+    jint sig
+) {
+    if (pid <= 0) {
+        return -EINVAL;
+    }
+    if (kill(pid, sig) != 0) {
+        int err = errno;
+        LOGE("Failed to send signal %d to pid %d, errno=%d (%s)", sig, pid, err, strerror(err));
+        return -err;
+    }
+    return 0;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_pocketserver_nativeengine_NativeEngine_nativeGetProcessState(
+    JNIEnv* env,
+    jobject /* thiz */,
+    jint pid
+) {
+    if (pid <= 0) {
+        return nullptr;
+    }
+
+    std::string stat_path = "/proc/" + std::to_string(pid) + "/stat";
+    int fd = open(stat_path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        return nullptr;
+    }
+
+    char buffer[256];
+    ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+    close(fd);
+
+    if (bytes_read <= 0) {
+        return nullptr;
+    }
+    buffer[bytes_read] = '\0';
+
+    // Format of /proc/[pid]/stat: pid (comm) state ...
+    const char* last_paren = strrchr(buffer, ')');
+    if (last_paren != nullptr && *(last_paren + 1) == ' ' && *(last_paren + 2) != '\0') {
+        char state_char[2] = { *(last_paren + 2), '\0' };
+        return env->NewStringUTF(state_char);
+    }
+
+    return nullptr;
+}
+
 } // extern "C"
