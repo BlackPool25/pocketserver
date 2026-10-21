@@ -2,4 +2,20 @@
 <resources>
     <string name="app_name">PocketServer</string>
     <string name="qs_tile_label">PocketServer</string>
+    <string name="title_services">Services</string>
+    <string name="title_packages">Packages</string>
+    <string name="title_activity">Activity</string>
+    <string name="title_system">System</string>
+    <string name="action_new_service">New service</string>
+    <string name="empty_services_description">No services currently running. Deploy your first local service:</string>
+    <string name="title_new_service">New service</string>
+    <string name="nav_services">Services</string>
+    <string name="nav_packages">Packages</string>
+    <string name="nav_activity">Activity</string>
+    <string name="nav_system">System</string>
+    <string name="tab_overview">Overview</string>
+    <string name="tab_logs">Logs</string>
+    <string name="tab_files">Files</string>
+    <string name="tab_env">Env</string>
+    <string name="tab_network">Network</string>
 </resources>

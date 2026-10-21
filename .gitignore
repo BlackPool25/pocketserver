@@ -13,3 +13,4 @@ captures/
 **/.cxx/
 *.apk
 *.aab
+.kotlin/

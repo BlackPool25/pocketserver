@@ -32,7 +32,7 @@ class StorageDoctor(
         userHomeDir: File? = null,
         projectDirs: List<File> = emptyList()
     ): StorageBreakdown {
-        val homeDir = userHomeDir ?: File(System.getProperty("user.home") ?: baseDir.absolutePath)
+        val homeDir = userHomeDir ?: File(baseDir, "home").takeIf { it.exists() } ?: baseDir
 
         // 1. Installed CAS Runtimes
         val storeDir = casStore?.storeRootDir ?: File(baseDir, "store")

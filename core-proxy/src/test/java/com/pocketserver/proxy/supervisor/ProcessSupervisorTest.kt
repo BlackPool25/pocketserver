@@ -35,7 +35,7 @@ class ProcessSupervisorTest {
         val pid = extractPid(process).toInt()
 
         try {
-            supervisor.attach(pid = pid, pgid = pid)
+            supervisor.attach(pid = pid, pgid = pid, process = process)
             assertThat(supervisor.state.value).isInstanceOf(ServiceProcessState.Running::class.java)
 
             // Freeze via SIGSTOP
@@ -95,7 +95,7 @@ class ProcessSupervisorTest {
         val process = ProcessBuilder("sleep", "30").start()
         val pid = extractPid(process).toInt()
 
-        supervisor.attach(pid = pid, pgid = pid)
+        supervisor.attach(pid = pid, pgid = pid, process = process)
         supervisor.terminate(graceTimeoutMs = 1000L)
 
         assertThat(supervisor.state.value).isEqualTo(ServiceProcessState.Stopped)

@@ -198,11 +198,15 @@ class PocketServerTileService : TileService() {
         if (active) {
             tile.state = Tile.STATE_ACTIVE
             tile.label = "PocketServer"
-            tile.subtitle = if (ports.isNotEmpty()) "Live (Port ${ports.joinToString(", ")})" else "Live"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                tile.subtitle = if (ports.isNotEmpty()) "Live (Port ${ports.joinToString(", ")})" else "Live"
+            }
         } else {
             tile.state = Tile.STATE_INACTIVE
             tile.label = "PocketServer"
-            tile.subtitle = "Sleeping (0% CPU)"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                tile.subtitle = "Sleeping (0% CPU)"
+            }
         }
         tile.updateTile()
     }

@@ -129,9 +129,10 @@ class ProcessSupervisor(
      * Attaches an existing process PID/PGID for testing and external supervision.
      */
     @Synchronized
-    fun attach(pid: Int, pgid: Int = pid, scope: CoroutineScope? = null) {
+    fun attach(pid: Int, pgid: Int = pid, scope: CoroutineScope? = null, process: Process? = null) {
         processPid = pid
         processPgid = pgid
+        activeProcess = process
         _state.value = ServiceProcessState.Running(pid, pgid)
         recordActivity()
 
@@ -271,6 +272,23 @@ class ProcessSupervisor(
                     NativeEngine.sendSignalToProcess(pid, NativeEngine.SIGKILL)
                 }
                 proc.destroyForcibly()
+            }
+        } else if (pid > 0) {
+            val deadline = System.currentTimeMillis() + graceTimeoutMs
+            var isDead = NativeEngine.getProcessState(pid) == null
+            while (!isDead && System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(10L)
+                } catch (e: InterruptedException) {
+                    break
+                }
+                isDead = NativeEngine.getProcessState(pid) == null
+            }
+            if (!isDead) {
+                if (pgid > 0) {
+                    NativeEngine.sendSignalToProcessGroup(pgid, NativeEngine.SIGKILL)
+                }
+                NativeEngine.sendSignalToProcess(pid, NativeEngine.SIGKILL)
             }
         }
 

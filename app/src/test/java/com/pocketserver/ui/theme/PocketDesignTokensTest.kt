@@ -15,8 +15,8 @@ class PocketDesignTokensTest {
         assertThat(PocketDesignTokens.COLOR_CANVAS_HEX).isEqualTo("#09090B")
         assertThat(PocketDesignTokens.COLOR_SURFACE_HEX).isEqualTo("#18181B")
         assertThat(PocketDesignTokens.COLOR_BORDER_HEX).isEqualTo("#27272A")
-        assertThat(PocketDesignTokens.COLOR_BRAND_INDIGO_HEX).isEqualTo("#6366F1")
-        assertThat(PocketDesignTokens.COLOR_STATUS_LIVE_HEX).isEqualTo("#10B981")
+        assertThat(PocketDesignTokens.COLOR_BRAND_INDIGO_HEX).isEqualTo("#38BDF8")
+        assertThat(PocketDesignTokens.COLOR_STATUS_LIVE_HEX).isEqualTo("#34D399")
 
         assertThat(PocketDesignTokens.CARD_CORNER_RADIUS_DP).isEqualTo(14f)
         assertThat(PocketDesignTokens.HAIRLINE_BORDER_WIDTH_DP).isEqualTo(1f)

@@ -33,12 +33,12 @@ object PocketDesignTokens {
     const val COLOR_TEXT_SECONDARY_HEX = "#A1A1AA" // Zinc 400
     const val COLOR_TEXT_MUTED_HEX = "#71717A" // Zinc 500
 
-    // Brand & Status Accents
-    const val COLOR_BRAND_INDIGO_HEX = "#6366F1" // Refined Indigo Accent
-    const val COLOR_STATUS_LIVE_HEX = "#10B981" // Soft Sage Emerald
-    const val COLOR_STATUS_SLEEPING_HEX = "#64748B" // Soft Slate Blue
-    const val COLOR_STATUS_ATTENTION_HEX = "#F59E0B" // Warm Amber
-    const val COLOR_STATUS_STOPPED_HEX = "#F43F5E" // Muted Rose
+    // Brand & Status Accents (Sky 400 accent, Zinc 500 stopped, Emerald 400 live, Blue 400 sleeping)
+    const val COLOR_BRAND_INDIGO_HEX = "#38BDF8" // Replaced old Indigo with Sky 400 accent
+    const val COLOR_STATUS_LIVE_HEX = "#34D399" // Emerald 400
+    const val COLOR_STATUS_SLEEPING_HEX = "#60A5FA" // Blue 400
+    const val COLOR_STATUS_ATTENTION_HEX = "#FBBF24" // Amber 400
+    const val COLOR_STATUS_STOPPED_HEX = "#71717A" // Zinc 500 (Stopped ≠ error)
 
     // Parsed Color Integers for Android Canvas/Views
     val CanvasColor: Int = Color.parseColor(COLOR_CANVAS_HEX)
