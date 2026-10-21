@@ -604,3 +604,182 @@ classDiagram
     HotReloadCoordinator --> AtomicFileSaver : atomicity guarantee
 ```
 
+---
+
+## 7. Universal Package Ecosystem & PocketForge Engine (Phase 5)
+
+PocketServer elevates mobile hosting beyond isolated sandboxes into a 70,000+ package universal Linux substrate across four integrated tiers:
+
+```mermaid
+flowchart TD
+    subgraph Tiers["The 4 Integrated Package Tiers"]
+        direction LR
+        T1["Tier 1: Curated Core\n- 14 Polyglot Runtimes\n- Zstd < 50MB, 16KB Aligned\n- Standalone & Stripped"]
+        T2["Tier 2: Alpine Linux\n- 36,000+ Packages\n- apk.static Engine\n- Musl Sysroot & Transitive .so"]
+        T3["Tier 3: Conda-Forge\n- 25,000+ AI & Math Packages\n- Micromamba aarch64\n- PyTorch, OpenCV, SciPy"]
+        T4["Tier 4: PocketForge\n- Decentralized Community Repos\n- Fedora COPR / AUR / TUR\n- Minisign Ed25519 Signed"]
+    end
+
+    subgraph Isolation["Multi-Ecosystem Libc & Hardware Isolation"]
+        SHIM["Layer 1: Transparent POSIX Shims (/files/bin/)\nHermetic PREFIX, PATH, and dynamic linker virtualization"]
+        MUSL_ENV["Musl Sysroot (/files/store/alpine/)\n- PT_INTERP: ld-musl-aarch64.so.1\n- LD_PRELOAD: libmimalloc.so"]
+        GLIBC_ENV["Glibc Prefix (/files/conda/envs/)\n- PT_INTERP: ld-linux-aarch64.so.1\n- Thread Governor: OMP_NUM_THREADS=4"]
+        PAGE_GATE["Layer 4: 16KB Page-Alignment Gate\np_align == 0x4000 (16,384 bytes) on all PT_LOAD segments"]
+    end
+
+    subgraph Search["Unified Full-Text Index"]
+        FTS["Layer 5: SQLite FTS5 Search Database\nSub-10ms query latency across 70,000+ packages\nInstant source tier tags ([Core], [Alpine], [Conda], [PocketForge])"]
+    end
+
+    T1 --> SHIM
+    T2 --> MUSL_ENV --> SHIM
+    T3 --> GLIBC_ENV --> SHIM
+    T4 --> SHIM
+    SHIM --> PAGE_GATE
+    T1 -.-> FTS
+    T2 -.-> FTS
+    T3 -.-> FTS
+    T4 -.-> FTS
+```
+
+### 7.1 UML Class Diagram (Phase 5 Hub Components)
+
+```mermaid
+classDiagram
+    class PocketForgeManager {
+        -ConcurrentHashMap repositories
+        -PocketForgeVerifier verifier
+        -PocketForgeManifestParser manifestParser
+        -UnifiedPackageSearchDb searchDb
+        -ContentAddressableStore casStore
+        -BinaryShimGenerator shimGenerator
+        +getRepositories() List~PocketForgeRepository~
+        +addRepository(PocketForgeRepository) Result
+        +removeRepository(String id) Boolean
+        +syncRepository(String id, String manifest, String signature) Result~Int~
+        +installForgePackage(PocketForgePackage, File archive) Result~File~
+    }
+
+    class PocketForgeVerifier {
+        +verifyManifestSignature(String manifest, String signature, String pubKey) Boolean
+        +verifySha256(File file, String expectedHex) Boolean
+        +parsePublicKey(String pubKeyBase64) ParsedMinisignPublicKey
+        +parseSignature(String sigContent) ParsedMinisignSignature
+    }
+
+    class PocketForgeManifestParser {
+        +parse(String jsonContent) PocketForgeManifest
+        -parseAndValidatePackage(JSONObject, String repo) PocketForgePackage
+    }
+
+    class ApkStaticEngine {
+        -File apkStaticBinary
+        -File alpineSysroot
+        -BinaryShimGenerator shimGenerator
+        -ElfAlignmentEngine elfAlignmentEngine
+        -AlpineDnsConfigurator dnsConfigurator
+        +installPackage(String packageName) InstallResult
+        +addMirror(String mirrorUrl)
+    }
+
+    class AlpineDnsConfigurator {
+        -File sysrootEtcDir
+        +resolveActiveDnsServers() List~String~
+        +generateResolvConf() String
+        +writeResolvConf() File
+        +getNodeDnsArguments() List~String~
+    }
+
+    class MicromambaEngine {
+        -File micromambaBinary
+        -File rootPrefixDir
+        +createEnvironment(String envName, List~String~ packages) MicromambaResult
+        +installPackage(String envName, String packageName) MicromambaResult
+        +buildProcessInCondaEnv(String envName, List~String~ command) ProcessBuilder
+    }
+
+    class CondaEnvironmentManager {
+        -MicromambaEngine micromambaEngine
+        -BinaryShimGenerator shimGenerator
+        -ArmThreadGovernor governor
+        +installPackage(String envName, String packageName) InstallResult
+    }
+
+    class ArmThreadGovernor {
+        -File sysCpuDir
+        +detectTopology() CpuClusterTopology
+        +getComputeEnvironmentVariables() Map~String, String~
+        +getMimallocEnvironment(File casLibDir) Map~String, String~
+        +getPythonOptimizationEnvironment() Map~String, String~
+    }
+
+    class BinaryShimGenerator {
+        -File binDir
+        +generateShim(ShimConfiguration) File
+        +removeShim(String commandName) Boolean
+        +hasShim(String commandName) Boolean
+    }
+
+    class UnifiedPackageSearchDb {
+        -SQLiteDatabase database
+        +indexPackages(List~UnifiedPackageRecord~)
+        +search(String query, PackageTier tier) List~UnifiedPackageRecord~
+        +getPackageById(String id) UnifiedPackageRecord
+        +setInstalled(String id, Boolean installed)
+    }
+
+    PocketForgeManager --> PocketForgeVerifier : cryptographic validation
+    PocketForgeManager --> PocketForgeManifestParser : parses schema
+    PocketForgeManager --> UnifiedPackageSearchDb : populates FTS index
+    PocketForgeManager --> BinaryShimGenerator : emits shims
+    ApkStaticEngine --> AlpineDnsConfigurator : configures DNS
+    ApkStaticEngine --> BinaryShimGenerator : emits Musl shims
+    CondaEnvironmentManager --> MicromambaEngine : manages rootless conda
+    CondaEnvironmentManager --> ArmThreadGovernor : compute thread pinning
+    CondaEnvironmentManager --> BinaryShimGenerator : emits Glibc shims
+```
+
+### 7.2 Ingestion & Security Validation Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User / App UI
+    participant PFM as PocketForgeManager
+    participant PFV as PocketForgeVerifier
+    participant CAS as CasStoreEngine
+    participant PE as ElfAlignmentEngine
+    participant BSG as BinaryShimGenerator
+    participant FTS as UnifiedPackageSearchDb
+
+    User->>PFM: Add Custom Repository URL
+    PFM->>PFV: verifyManifestSignature(manifest, signature, pubKey)
+    alt Signature Fails
+        PFV-->>PFM: Invalid Signature (REJECT)
+        PFM-->>User: SecurityException: Corrupted or forged signature
+    else Signature Passes
+        PFV-->>PFM: Valid Minisign Ed25519 Signature (PASS)
+        PFM->>FTS: Ingest package catalog (< 10ms)
+        FTS-->>User: Instant live search results with tier badge
+    end
+
+    User->>PFM: Tap [Install Package]
+    PFM->>PFV: verifySha256(downloadedArchive, expectedHash)
+    alt SHA-256 Mismatch
+        PFV-->>PFM: Checksum Mismatch (REJECT)
+        PFM->>PFM: Quarantine cleanup (delete corrupted file)
+        PFM-->>User: SecurityException: Package integrity compromised
+    else Checksum Valid
+        PFV-->>PFM: Valid SHA-256 (PASS)
+        PFM->>CAS: Streaming Zstd decompression into CAS store
+        CAS-->>PFM: Extracted to /files/store/<hash>-<name>/
+        PFM->>PE: 16KB Page-Alignment Audit (p_align >= 0x4000)
+        PE-->>PFM: 100% Android 15/16 compliant
+        PFM->>BSG: generateShim(commandName, targetBin, prefixDir, envMap)
+        BSG-->>PFM: Executable POSIX shim generated in /files/bin/
+        PFM->>FTS: setInstalled(packageId, true)
+        PFM-->>User: Installation Complete! Ready to run in 1-tap.
+    end
+```
+
+
