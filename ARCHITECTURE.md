@@ -433,3 +433,174 @@ Mobile Wi-Fi transceivers enter aggressive sleep cycles (DTIM listening interval
 1. **Screen Off State:** PocketServer acquires `WifiManager.WIFI_MODE_FULL_HIGH_PERF`, preventing the hardware radio from powering down completely.
 2. **Screen On / Active Connection State:** Dynamically acquires `WifiManager.WIFI_MODE_FULL_LOW_LATENCY` (API 29+), reducing ping jitter for real-time web development.
 3. **Heartbeat Priming:** An outbound 15-second QUIC heartbeat ping maintains the NAT state table and primes baseband RF amplifiers, guaranteeing Time-To-First-Byte (TTFB) latency under **35ms** with the device screen locked.
+
+---
+
+## 9. Approachable UI/UX, PocketEditor & Mobile Ergonomics Architecture (Phase 4)
+
+PocketServer rejects developer application "AI slop" clichés—pure `#000000` pitch-black backgrounds, eye-straining radioactive neon greens, and intimidating virtual hacker keyboards. Instead, it implements a warm, human-centric design inspired by Vercel and Railway, driven by **progressive disclosure**.
+
+### 1. Presentation Architecture & State Flow
+
+```mermaid
+flowchart TD
+    subgraph UI_State["Dashboard & Mobile Ergonomics Layer"]
+        VM["PocketServerViewModel\n(Central State & Flow Coordinator)"]
+        ZeroData["Zero-Data State\n(1-Tap Quick Start Templates)"]
+        Cards["Service Cards\n(Surface: URL, Status, Monorepo Badge)"]
+        LayerBeneath["The Layer Beneath\n(CPU/RAM, Log Stream, Env Editor)"]
+        Editor["PocketEditor Session\n(Syntax Highlighting, Line/Col Telemetry)"]
+        CmdRunner["Friendly Command Runner\n(1-Tap Maintenance Chips + Raw Shell)"]
+        LogViewer["Human Log Viewer\n(Anti-Jerk Scroll Lock & Error Filters)"]
+        ShareModal["High-Fidelity QR Modal\n(Auto-Brightness Boost to 100%)"]
+    end
+
+    subgraph System_Integration["System-Level Presence"]
+        QSTile["Android Quick Settings TileService\n(1-Tap Toggle Active / Sleeping)"]
+        LockNotification["Actionable Lockscreen Notification\n([Pause All], [Copy Link], [Stop All])"]
+    end
+
+    subgraph Core_Engines["Core Backend Engines"]
+        WakeCoord["MonorepoWakeCoordinator\n(Sequence Unfreeze < 2ms)"]
+        FileSaver["AtomicFileSaver\n(POSIX fsync Barrier)"]
+        HotReload["HotReloadCoordinator\n(Config Reload < 500ms)"]
+        RoomDB["PocketDatabase\n(Sandbox & Manifest Catalog)"]
+    end
+
+    VM --> ZeroData
+    VM --> Cards
+    Cards --> LayerBeneath
+    LayerBeneath --> Editor
+    LayerBeneath --> CmdRunner
+    LayerBeneath --> LogViewer
+    Cards --> ShareModal
+
+    QSTile <--> VM
+    LockNotification <--> VM
+    Editor --> FileSaver
+    FileSaver --> HotReload
+    Cards --> WakeCoord
+    VM --> RoomDB
+```
+
+### 2. PocketEditor Hot Reload & Monorepo Coordinated Wake Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as Developer / Mobile Browser
+    participant Editor as PocketEditor
+    participant Saver as AtomicFileSaver
+    participant Coord as HotReloadCoordinator
+    participant Wake as MonorepoWakeCoordinator
+    participant FE as Frontend Process (Vite)
+    participant BE as Backend Process (FastAPI)
+
+    Note over Dev,BE: Flow A: PocketEditor Hot Reload (< 500ms Acceptance Protocol)
+    Dev->>Editor: Edit .env (PORT=8000 -> PORT=8080)
+    Dev->>Editor: Tap [Save & Restart]
+    Editor->>Coord: saveAndRestart(serviceId, envFile, content)
+    Coord->>Saver: saveAtomic(targetFile, content)
+    Saver->>Saver: Write to .env.tmp.<nano> + fsync(fd)
+    Saver->>Saver: POSIX atomic rename over .env
+    Saver-->>Coord: File saved atomically
+    Coord->>BE: Reload configuration / Restart supervisor
+    BE-->>Coord: Port 8080 bound & responding
+    Coord-->>Editor: HotReloadResult (Latency < 500ms: PASS)
+
+    Note over Dev,BE: Flow B: Monorepo Coordinated Wake (< 2ms Acceptance Protocol)
+    Dev->>FE: Inbound HTTP Request to Frontend (QR scan / LAN)
+    FE->>Wake: Inbound connection triggers wake
+    Wake->>FE: SIGCONT unfreeze (Frontend)
+    Wake->>BE: Sequenced unfreeze (Backend API)
+    Note over FE,BE: Coordinated wake completes in < 2ms total
+    BE-->>FE: API data returned
+    FE-->>Dev: HTTP 200 Complete Web Application Rendered
+```
+
+### 3. Class Diagram: Phase 4 Mobile Presentation Layer
+
+```mermaid
+classDiagram
+    class PocketDesignTokens {
+        +String COLOR_CANVAS_HEX = "#09090B"
+        +String COLOR_SURFACE_HEX = "#18181B"
+        +String COLOR_BORDER_HEX = "#27272A"
+        +String COLOR_BRAND_INDIGO_HEX = "#6366F1"
+        +String COLOR_STATUS_LIVE_HEX = "#10B981"
+        +String COLOR_STATUS_SLEEPING_HEX = "#64748B"
+        +Float CARD_CORNER_RADIUS_DP = 14f
+        +getHumanStatusDescription(status) String
+        +getStatusColor(status) Int
+    }
+
+    class StarterTemplate {
+        +String id
+        +String title
+        +String runtimeName
+        +Int defaultPort
+        +List startCommand
+        +Map templateFiles
+        +StarterTemplate FASTAPI_HELLO_WORLD
+        +StarterTemplate REACT_VITE_FRONTEND
+        +StarterTemplate GO_MICROSERVICE
+        +StarterTemplate BUN_ELYSIA
+        +StarterTemplate RUST_AXUM
+    }
+
+    class MonorepoDetector {
+        +detect(File repoDir, String name) List~DetectedService~
+        -inspectDirectory(File dir, File root, String name) DetectedService
+    }
+
+    class MonorepoWakeCoordinator {
+        -ConcurrentHashMap linksByMonorepoId
+        +registerLink(MonorepoLink)
+        +getLinkedServices(String serviceId) List~String~
+        +wakeCoordinated(String sourceId, unfreezeAction) CoordinatedWakeResult
+    }
+
+    class AtomicFileSaver {
+        +saveAtomic(File targetFile, String content) Boolean
+    }
+
+    class HotReloadCoordinator {
+        +saveAndRestart(String serviceId, File file, String content, restartAction) HotReloadResult
+    }
+
+    class HumanLogViewer {
+        -List allEntries
+        -MutableStateFlow isAutoScrollPaused
+        -MutableStateFlow currentFilter
+        +append(LogLevel, String message, String tag)
+        +onUserTouchOrScroll()
+        +jumpToLatest()
+        +setFilter(LogFilter)
+        +copyErrorTraces() String
+        +copyCurrentLogsFormatted() String
+    }
+
+    class QrSharingController {
+        -MutableStateFlow state
+        +selectTab(SharingTab)
+        +onModalShown(Window)
+        +onModalDismissed(Window)
+        +generateActiveQrBitmap(Int sizePx) Bitmap
+        +validateEndpoint(String urlString) Int
+    }
+
+    class PocketServerTileService {
+        -StateFlow isServerActive
+        +onClick()
+        +updateTileState()
+    }
+
+    PocketServerViewModel --> StarterTemplate : provisions
+    PocketServerViewModel --> MonorepoDetector : detects
+    PocketServerViewModel --> MonorepoWakeCoordinator : coordinates wake
+    PocketServerViewModel --> HumanLogViewer : streams logs
+    PocketServerViewModel --> QrSharingController : displays share modal
+    PocketServerViewModel --> PocketServerTileService : controls QS state
+    HotReloadCoordinator --> AtomicFileSaver : atomicity guarantee
+```
+
