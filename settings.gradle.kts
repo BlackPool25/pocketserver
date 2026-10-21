@@ -11,6 +11,7 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
@@ -20,3 +21,8 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "pocketserver"
+
+include(":native-engine")
+include(":core-persistence")
+include(":core-storage")
+include(":core-toolchain")
