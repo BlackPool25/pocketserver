@@ -93,7 +93,11 @@ class PocketServerHostService : Service() {
                 return START_NOT_STICKY
             }
             else -> {
-                startForeground(NOTIFICATION_ID, buildForegroundNotification())
+                try {
+                    startForeground(NOTIFICATION_ID, buildForegroundNotification())
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to engage startForeground for host service", e)
+                }
                 activateHostShields()
                 _isRunning.value = true
                 return START_STICKY
@@ -110,9 +114,14 @@ class PocketServerHostService : Service() {
             wifiLockManager.acquireHighPerf()
         }
 
-        // 3. Launch VpnService Loopback Persistence Shield
+        // 3. Launch VpnService Loopback Persistence Shield (only if enabled and already approved by user)
         if (PersistencePreferences.isVpnShieldEnabled(this)) {
-            PocketServerVpnService.start(this)
+            val prepareIntent = android.net.VpnService.prepare(this)
+            if (prepareIntent == null) {
+                PocketServerVpnService.start(this)
+            } else {
+                Log.i(TAG, "VPN persistence shield requires user consent. Deferring until user activates it in Settings.")
+            }
         }
 
         Log.i(TAG, "All host persistence shields activated successfully")

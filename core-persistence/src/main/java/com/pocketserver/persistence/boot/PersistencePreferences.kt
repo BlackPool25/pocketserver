@@ -32,7 +32,7 @@ object PersistencePreferences {
     }
 
     fun isVpnShieldEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_VPN_SHIELD_ENABLED, true)
+        return getPrefs(context).getBoolean(KEY_VPN_SHIELD_ENABLED, false)
     }
 
     fun setVpnShieldEnabled(context: Context, enabled: Boolean) {

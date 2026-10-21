@@ -11,7 +11,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(application = com.pocketserver.PocketServerApplication::class, sdk = [34])
 class MainActivityTest {
 
     @Test

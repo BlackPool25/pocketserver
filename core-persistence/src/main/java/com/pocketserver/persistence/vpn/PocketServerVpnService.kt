@@ -49,13 +49,22 @@ class PocketServerVpnService : VpnService() {
         val isShieldActive: StateFlow<Boolean> = _isShieldActive.asStateFlow()
 
         fun start(context: Context) {
+            val prepareIntent = prepare(context)
+            if (prepareIntent != null) {
+                Log.w(TAG, "VPN service not yet prepared/approved by user. Cannot start until user grants permission.")
+                return
+            }
             val intent = Intent(context, PocketServerVpnService::class.java).apply {
                 action = ACTION_START_SHIELD
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start VPN service", e)
             }
         }
 
@@ -63,7 +72,11 @@ class PocketServerVpnService : VpnService() {
             val intent = Intent(context, PocketServerVpnService::class.java).apply {
                 action = ACTION_STOP_SHIELD
             }
-            context.startService(intent)
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to stop VPN service", e)
+            }
         }
     }
 
@@ -82,8 +95,20 @@ class PocketServerVpnService : VpnService() {
                 return START_NOT_STICKY
             }
             else -> {
-                startForeground(NOTIFICATION_ID, buildForegroundNotification())
-                establishLoopbackShield()
+                val prepareIntent = prepare(this)
+                if (prepareIntent != null) {
+                    Log.w(TAG, "VPN service not prepared by user; aborting foreground start.")
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                try {
+                    startForeground(NOTIFICATION_ID, buildForegroundNotification())
+                    establishLoopbackShield()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to engage foreground notification for VPN shield", e)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 return START_STICKY
             }
         }
