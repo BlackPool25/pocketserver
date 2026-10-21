@@ -42,7 +42,9 @@ class MainActivity : AppCompatActivity() {
             viewModel = PocketServerViewModel(
                 context = this,
                 database = app.database,
-                wakeCoordinator = app.wakeCoordinator
+                wakeCoordinator = app.wakeCoordinator,
+                searchDb = app.searchDb,
+                pocketForgeManager = app.pocketForgeManager
             )
         }
 

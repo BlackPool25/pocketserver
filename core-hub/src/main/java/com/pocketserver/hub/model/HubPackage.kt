@@ -55,4 +55,23 @@ data class HubPackageDescriptor(
         get() = if (upstreamSizeBytes > 0) {
             (1.0 - (strippedSizeBytes.toDouble() / upstreamSizeBytes.toDouble())) * 100.0
         } else 0.0
+
+    fun toUnifiedRecord(): com.pocketserver.hub.search.UnifiedPackageRecord {
+        return com.pocketserver.hub.search.UnifiedPackageRecord(
+            id = "core-${runtime.identifier}",
+            name = packageName,
+            version = engineVersion,
+            tier = com.pocketserver.hub.search.PackageTier.CORE,
+            category = category.label,
+            description = "${runtime.displayName} standalone 16KB-aligned hermetic package",
+            sizeCompressedBytes = strippedSizeBytes,
+            installedSizeBytes = upstreamSizeBytes,
+            sourceRepo = "PocketHub Core",
+            downloadUrl = "https://hub.pocketserver.org/packages/$archiveFileName",
+            sha256Checksum = sha256Checksum,
+            primaryBinary = primaryBinaryRelPath,
+            isInstalled = false,
+            environmentVariables = environmentVariables
+        )
+    }
 }

@@ -240,7 +240,7 @@ class UnifiedPackageSearchDb(
                 }
 
                 val whereSql = "WHERE " + whereClauses.joinToString(" AND ")
-                val orderBySql = if (isFts5) "bm25(packages_fts), m.name ASC" else "m.name ASC"
+                val orderBySql = "m.is_installed DESC, m.name ASC"
 
                 database.rawQuery(
                     """

@@ -24,6 +24,7 @@ class PocketServerViewModelTest {
 
     private lateinit var context: Context
     private lateinit var database: PocketDatabase
+    private lateinit var searchDb: com.pocketserver.hub.search.UnifiedPackageSearchDb
     private lateinit var viewModel: PocketServerViewModel
     private val testDispatcher = UnconfinedTestDispatcher()
 
@@ -33,15 +34,18 @@ class PocketServerViewModelTest {
         database = Room.inMemoryDatabaseBuilder(context, PocketDatabase::class.java)
             .allowMainThreadQueries()
             .build()
+        searchDb = com.pocketserver.hub.search.UnifiedPackageSearchDb()
         viewModel = PocketServerViewModel(
             context = context,
             database = database,
+            searchDb = searchDb,
             ioDispatcher = testDispatcher
         )
     }
 
     @After
     fun tearDown() {
+        searchDb.close()
         database.close()
     }
 
@@ -108,5 +112,56 @@ class PocketServerViewModelTest {
         viewModel.toggleServiceSleepStateSync(serviceId)
         assertThat(viewModel.services.value[0].status).isEqualTo("SLEEPING")
         assertThat(PocketServerTileService.isServerActive.value).isFalse()
+    }
+
+    @Test
+    fun testUniversalPackageSearchAcrossTiers() = runTest(testDispatcher) {
+        val sample = com.pocketserver.hub.search.UnifiedPackageRecord(
+            id = "pkg-sample",
+            name = "whisper-test",
+            version = "1.0",
+            tier = com.pocketserver.hub.search.PackageTier.POCKETFORGE,
+            category = "AI",
+            description = "Test speech model",
+            sizeCompressedBytes = 1000,
+            installedSizeBytes = 3000,
+            sourceRepo = "Test Forge",
+            downloadUrl = "https://example.com/test.tar.zst",
+            sha256Checksum = "0".repeat(64),
+            primaryBinary = "bin/whisper"
+        )
+        viewModel.searchDb.indexPackages(listOf(sample))
+
+        viewModel.searchPackagesSync("whisper")
+        assertThat(viewModel.packageSearchResults.value).hasSize(1)
+        assertThat(viewModel.packageSearchResults.value[0].name).isEqualTo("whisper-test")
+        assertThat(viewModel.packageSearchResults.value[0].tierBadge).isEqualTo("[PocketForge]")
+    }
+
+    @Test
+    fun testCustomPocketForgeRepositoryManagement() = runTest(testDispatcher) {
+        viewModel.loadCustomRepositories()
+        val initialCount = viewModel.customRepositories.value.size
+        assertThat(initialCount).isAtLeast(2)
+
+        val verifier = com.pocketserver.hub.forge.PocketForgeVerifier()
+        val keyPair = verifier.generateKeyPairForTesting()
+
+        val newRepo = com.pocketserver.hub.forge.PocketForgeRepository(
+            id = "custom-test-repo",
+            name = "Custom User Repo",
+            description = "Community tools",
+            manifestUrl = "https://example.com/repo/index.json",
+            signatureUrl = "https://example.com/repo/index.json.minisig",
+            publicKeyBase64 = keyPair.publicKeyBase64
+        )
+
+        val result = viewModel.addCustomRepository(newRepo)
+        assertThat(result.isSuccess).isTrue()
+        assertThat(viewModel.customRepositories.value.size).isEqualTo(initialCount + 1)
+
+        val removed = viewModel.removeCustomRepository("custom-test-repo")
+        assertThat(removed).isTrue()
+        assertThat(viewModel.customRepositories.value.size).isEqualTo(initialCount)
     }
 }

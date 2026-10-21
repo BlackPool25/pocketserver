@@ -36,6 +36,11 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all {
+                it.maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2)
+                it.forkEvery = 50
+                it.jvmArgs("-XX:+UseParallelGC", "-Xmx2g")
+            }
         }
     }
 }

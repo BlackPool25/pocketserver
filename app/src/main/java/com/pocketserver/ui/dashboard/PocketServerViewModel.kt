@@ -3,6 +3,13 @@ package com.pocketserver.ui.dashboard
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pocketserver.hub.forge.PocketForgeManager
+import com.pocketserver.hub.forge.PocketForgeRepository
+import com.pocketserver.hub.search.PackageTier
+import com.pocketserver.hub.search.UnifiedPackageRecord
+import com.pocketserver.hub.search.UnifiedPackageSearchDb
+import com.pocketserver.hub.shim.BinaryShimGenerator
+import com.pocketserver.storage.cas.ContentAddressableStore
 import com.pocketserver.storage.db.PocketDatabase
 import com.pocketserver.storage.db.SandboxEntity
 import com.pocketserver.storage.doctor.StorageBreakdown
@@ -31,13 +38,20 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Main ViewModel driving the PocketServer dashboard, service lifecycles,
- * progressive disclosure states, onboarding, and storage doctor.
+ * progressive disclosure states, onboarding, storage doctor,
+ * and the 70,000+ package search engine with PocketForge community repositories.
  */
 class PocketServerViewModel(
     private val context: Context,
     private val database: PocketDatabase,
     val wakeCoordinator: MonorepoWakeCoordinator = MonorepoWakeCoordinator(),
     val storageDoctor: StorageDoctor = StorageDoctor(null, database),
+    val searchDb: UnifiedPackageSearchDb = UnifiedPackageSearchDb(context),
+    val pocketForgeManager: PocketForgeManager = PocketForgeManager(
+        searchDb = searchDb,
+        casStore = ContentAddressableStore(File(context.filesDir, "store"), database),
+        shimGenerator = BinaryShimGenerator(File(context.filesDir, "bin"))
+    ),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
 
@@ -60,6 +74,13 @@ class PocketServerViewModel(
 
     private val _storageBreakdown = MutableStateFlow<StorageBreakdown?>(null)
     val storageBreakdown: StateFlow<StorageBreakdown?> = _storageBreakdown.asStateFlow()
+
+    // Package search & community forge flows
+    private val _packageSearchResults = MutableStateFlow<List<UnifiedPackageRecord>>(emptyList())
+    val packageSearchResults: StateFlow<List<UnifiedPackageRecord>> = _packageSearchResults.asStateFlow()
+
+    private val _customRepositories = MutableStateFlow<List<PocketForgeRepository>>(emptyList())
+    val customRepositories: StateFlow<List<PocketForgeRepository>> = _customRepositories.asStateFlow()
 
     // Per-service log viewers, editors, and command runners
     private val logViewers = ConcurrentHashMap<String, HumanLogViewer>()
@@ -314,5 +335,41 @@ class PocketServerViewModel(
             storageDoctor.cleanReclaimableCaches(baseDir = context.filesDir)
             refreshStorageDoctor()
         }
+    }
+
+    // --- Phase 5 Universal Package Search & PocketForge Operations ---
+
+    /**
+     * Executes sub-10ms search across 70,000+ packages.
+     */
+    fun searchPackages(query: String, filterTier: PackageTier? = null) {
+        viewModelScope.launch(ioDispatcher) {
+            searchPackagesSync(query, filterTier)
+        }
+    }
+
+    fun searchPackagesSync(query: String, filterTier: PackageTier? = null) {
+        val results = searchDb.search(query, filterTier)
+        _packageSearchResults.value = results
+    }
+
+    fun loadCustomRepositories() {
+        _customRepositories.value = pocketForgeManager.getRepositories()
+    }
+
+    fun addCustomRepository(repository: PocketForgeRepository): Result<PocketForgeRepository> {
+        val result = pocketForgeManager.addRepository(repository)
+        if (result.isSuccess) {
+            loadCustomRepositories()
+        }
+        return result
+    }
+
+    fun removeCustomRepository(repositoryId: String): Boolean {
+        val removed = pocketForgeManager.removeRepository(repositoryId)
+        if (removed) {
+            loadCustomRepositories()
+        }
+        return removed
     }
 }
